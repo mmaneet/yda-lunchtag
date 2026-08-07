@@ -3,16 +3,17 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Lunchtag</title>
+    <title>LunchTag · Yale Debate Association</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='yda-logo.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
     <header class="site-header">
       <div class="brand">
-        <div class="logo">LT</div>
+        <img class="logo" src="{{ url_for('static', filename='yda-logo.png') }}" alt="Yale Debate Association logo">
         <div>
-          <h1>Lunchtag</h1>
-          <p>Pairing engine for lunch rotations</p>
+          <h1>LunchTag</h1>
+          <p>Yale Debate Association · lunch pairings</p>
         </div>
       </div>
       <nav class="nav">
