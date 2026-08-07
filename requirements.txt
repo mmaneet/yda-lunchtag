@@ -2,3 +2,5 @@ Flask==3.0.2
 pytest==8.1.1
 gunicorn==22.0.0
 psycopg[binary]==3.2.13
+Authlib==1.6.1
+requests==2.32.4

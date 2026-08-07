@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Sign in</h2>
+  <p class="muted">Use your Yale (yale.edu) Google account to access the YDA member portal.</p>
+  <div class="actions">
+    <form action="{{ url_for('auth.google_login') }}" method="get">
+      <button type="submit">Sign in with Google</button>
+    </form>
+  </div>
+</section>
+{% endblock %}
