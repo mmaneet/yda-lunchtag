@@ -51,7 +51,7 @@ The maintainer profile is the single most important architectural constraint:
 
 Sequenced by behavior-change required, not build cost. Features that require board members to change their workflow are built **only when a board member asks** ("pull, not push").
 
-1. **Tier 1 — live or next (nobody changes behavior)**: LunchTag; YDBoba (same engine, different config — build as one parameterized pairing system, not two features); read-only tournament calendar; a links hub collecting existing scattered signup sheets and team docs.
+1. **Tier 1 — live or next (nobody changes behavior)**: LunchTag; YDBoba (same engine, different config — build as one parameterized pairing system, not two features); read-only tournament calendar; a links hub collecting existing scattered signup sheets and team docs. Planned LunchTag engine features (Maneet, Aug 2026): per-member "strikes" (blacklist someone from being your pairing) and "crushes" (boost the chance of pairing with a specific person) — natural fits for the existing pair-penalty scoring, stored as data per member.
 2. **Tier 2 — members change, board doesn't**: practice RSVPs, judge signups, tournament interest forms. Output remains "a Google Sheet the board reads" — the portal writes one-directionally to existing sheets via the Sheets API so board workflow is untouched.
 3. **Tier 3 — by invitation only**: treasurer reimbursement view (status loop: submitted → approved → paid, with member-facing status page), admin dashboard (manual pairing trigger, roster edit, feature toggles, usage counters), roster/directory, institutional-memory wiki.
 
@@ -59,7 +59,7 @@ Instrument from day one: simple counters (pairings completed, opt-out rate, sign
 
 ## Current state and the proximate goal
 
-**State** (updated 2026-08-07): Code lives at github.com/mmaneet/yda-member-portal (private, personal account — YDA org transfer pending, see Governance). Deployed on Railway (project `yda-member-portal`, service `web`, Postgres plugin provisioned) at https://web-production-f7a671.up.railway.app. CI smoke tests run on every push. Still pending: GitHub→Railway auto-deploy connection (needs Railway's GitHub app installed via dashboard), spending cap, Postgres data migration (app still uses ephemeral SQLite), auth. Historic pairing data remains in the local `data/lunchtag.sqlite` only — do not load member data into the deployed instance until auth exists.
+**State** (updated 2026-08-07): Code lives at github.com/mmaneet/yda-member-portal (private, personal account — YDA org transfer pending, see Governance). Deployed on Railway (project `yda-member-portal`, service `web` + Postgres) at https://web-production-f7a671.up.railway.app, with GitHub→Railway auto-deploy on push to `main` confirmed working. The app is dual-backend: Postgres when `DATABASE_URL` is set (production), SQLite otherwise (local dev, CI). Historic pairing data (46 players, 6 sessions) has been migrated into Railway Postgres and verified live. UI is Yale-styled (white/gray/Yale Blue, YDA logo). Google OAuth with yale.edu restriction + whitelist scaffold is built but dormant: it activates only when `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set (see README "Auth" for the Google Cloud Console steps). Still pending: OAuth credentials, Railway spending cap, backup verification, YDA org transfers. Maneet has accepted running the current data with no auth temporarily and plans to reset it before the semester starts.
 
 **The immediate task, in order. Work through this checklist with Maneet; don't skip ahead:**
 
