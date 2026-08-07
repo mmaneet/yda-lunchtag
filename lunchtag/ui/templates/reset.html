@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Reset</h2>
+  <p class="muted">Choose a reset option. History reset keeps players. Full reset wipes all data.</p>
+  <div class="actions">
+    <form action="{{ url_for('reset_history') }}" method="post">
+      <button class="ghost" type="submit">Reset history</button>
+    </form>
+    <form action="{{ url_for('reset_full') }}" method="post">
+      <button class="danger" type="submit">Full reset</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

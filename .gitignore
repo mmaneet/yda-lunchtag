@@ -1,0 +1,23 @@
+# Environment / secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Member data — never commit. The database lives outside the repo.
+data/
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+*.dump
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
