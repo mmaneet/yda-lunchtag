@@ -28,11 +28,6 @@
         {% endfor %}
       </nav>
       {% endif %}
-      {% if user_email %}
-      <div class="auth-chip">
-        {{ user_email }} · <a href="{{ url_for('auth.logout') }}">Log out</a>
-      </div>
-      {% endif %}
       {% if draft_nav and is_admin %}
       <div class="draft-chip">
         Draft ready · <a href="{{ url_for('lunchtag.admin_draft_view', session_id=draft_nav.session_id) }}">View</a>

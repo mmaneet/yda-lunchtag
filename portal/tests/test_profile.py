@@ -67,6 +67,18 @@ def test_edit_profile_collapsed_by_default(auth_env, db_path):
     assert "<details open" not in html
 
 
+def test_logout_lives_on_profile_tab_only(auth_env, db_path):
+    app = create_app(db_path)
+    client = onboarded_member(app, "alice@yale.edu", "Alice")
+    profile_html = client.get("/profile").get_data(as_text=True)
+    assert "Log out" in profile_html
+    assert "alice@yale.edu" in profile_html
+    # No auth chip in the shared header: other pages have no logout link.
+    lunchtag_html = client.get("/lunchtag").get_data(as_text=True)
+    assert "Log out" not in lunchtag_html
+    assert 'class="auth-chip"' not in lunchtag_html
+
+
 def test_profile_page_has_no_lunchtag_content(auth_env, db_path):
     app = create_app(db_path)
     client = onboarded_member(app, "alice@yale.edu", "Alice")

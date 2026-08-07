@@ -60,6 +60,14 @@
       {% endfor %}
     </datalist>
   </details>
+
+  {% if user_email %}
+  <section class="panel account-panel">
+    <h2>Account</h2>
+    <p class="muted">Signed in as {{ user_email }}</p>
+    <a class="button ghost" href="{{ url_for('auth.logout') }}">Log out</a>
+  </section>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}
