@@ -8,8 +8,18 @@
       <button type="submit">Sign in with Google</button>
     </form>
     {% if config.DUMMY_LOGIN_EMAIL %}
-    <form action="{{ url_for('auth.dummy_login') }}" method="post">
-      <button class="ghost" type="submit">Dummy login ({{ config.DUMMY_LOGIN_EMAIL }})</button>
+    {% set demails = config.DUMMY_LOGIN_EMAIL.split(',') | map('trim') | list %}
+    <form action="{{ url_for('auth.dummy_login') }}" method="post" class="pref-form">
+      {% if demails | length > 1 %}
+      <select name="email">
+        {% for e in demails %}
+        <option value="{{ e }}">{{ e }}</option>
+        {% endfor %}
+      </select>
+      <button class="ghost" type="submit">Dummy login</button>
+      {% else %}
+      <button class="ghost" type="submit">Dummy login ({{ demails[0] }})</button>
+      {% endif %}
     </form>
     {% endif %}
   </div>

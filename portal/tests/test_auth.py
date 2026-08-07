@@ -135,6 +135,20 @@ def test_dummy_login_disabled_by_default(auth_env, db_path):
     assert client.get("/profile").status_code == 302  # still signed out
 
 
+def test_dummy_login_multiple_emails(auth_env, db_path, monkeypatch):
+    monkeypatch.setenv("DUMMY_LOGIN_EMAIL", "a@example.com, b@example.com")
+    client = create_app(db_path).test_client()
+    html = client.get("/login").get_data(as_text=True)
+    assert "a@example.com" in html and "b@example.com" in html
+    client.post("/auth/dummy", data={"email": "b@example.com"})
+    with client.session_transaction() as sess:
+        assert sess["user_email"] == "b@example.com"
+    # Emails outside the configured list are rejected.
+    client.post("/auth/dummy", data={"email": "evil@example.com"})
+    with client.session_transaction() as sess:
+        assert sess.get("user_email") != "evil@example.com"
+
+
 def test_dummy_login_when_enabled(auth_env, db_path, monkeypatch):
     monkeypatch.setenv("DUMMY_LOGIN_EMAIL", "test@gmail.com")
     client = create_app(db_path).test_client()

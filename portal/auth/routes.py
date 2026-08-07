@@ -68,8 +68,9 @@ def init_auth(app: Flask) -> None:
     app.config["GOOGLE_CLIENT_ID"] = os.environ.get("GOOGLE_CLIENT_ID", "")
     app.config["GOOGLE_CLIENT_SECRET"] = os.environ.get("GOOGLE_CLIENT_SECRET", "")
     # TESTING BACKDOOR, off unless the env var is set: shows a "dummy login"
-    # button that signs in as this email with no OAuth and no yale.edu check.
-    # Anyone who can reach the site can use it — unset the env var to kill it.
+    # control that signs in as one of these comma-separated emails with no
+    # OAuth and no yale.edu check. Anyone who can reach the site can use it —
+    # unset the env var to kill it.
     app.config["DUMMY_LOGIN_EMAIL"] = os.environ.get("DUMMY_LOGIN_EMAIL", "")
     app.register_blueprint(bp)
 
@@ -158,13 +159,22 @@ def callback():
     return redirect(url_for("index"))
 
 
+def dummy_emails() -> list[str]:
+    raw = current_app.config.get("DUMMY_LOGIN_EMAIL", "")
+    return [e.strip().lower() for e in raw.split(",") if e.strip()]
+
+
 @bp.route("/auth/dummy", methods=["POST"])
 def dummy_login():
-    email = current_app.config.get("DUMMY_LOGIN_EMAIL")
-    if not email:
+    emails = dummy_emails()
+    if not emails:
+        return redirect(url_for("auth.login"))
+    email = (request.form.get("email") or emails[0]).strip().lower()
+    if email not in emails:
+        flash("Unknown dummy user.")
         return redirect(url_for("auth.login"))
     session.clear()
-    session["user_email"] = email.strip().lower()
+    session["user_email"] = email
     session["user_name"] = "Dummy user"
     return redirect(url_for("index"))
 
