@@ -6,6 +6,7 @@ from pathlib import Path
 
 from flask import Flask, flash, redirect, render_template, request, url_for, g
 
+from lunchtag.auth import init_auth
 from lunchtag.config import default_db_path
 from lunchtag.engine.config import DEFAULT_GENERATION, DEFAULT_SCORING
 from lunchtag.engine.editing import swap_players
@@ -18,6 +19,7 @@ def create_app(db_path: Path | None = None) -> Flask:
     app = Flask(__name__)
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", "lunchtag-dev")
     app.config["DB_PATH"] = db_path or default_db_path()
+    init_auth(app)
 
     def get_repo() -> Repository:
         if "repo" not in g:

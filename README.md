@@ -44,6 +44,35 @@ python -m lunchtag.cli draft confirm
 python -m lunchtag.cli history list
 ```
 
+## Auth
+
+Sign-in is Google OAuth (OpenID Connect via Authlib), restricted to yale.edu accounts. It is **off by default**: if `GOOGLE_CLIENT_ID` is unset, the app runs with no login at all (current local-dev behavior). When it is set, every page requires sign-in except `/login`, `/auth/*`, and static files.
+
+**Env vars** (see `.env.example`): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. In production these live in Railway environment variables.
+
+**Google Cloud Console setup** (one-time):
+
+1. Create (or pick) a Google Cloud project → APIs & Services → OAuth consent screen. External user type is fine; add the app name and a contact email.
+2. APIs & Services → Credentials → Create Credentials → **OAuth 2.0 Client ID**, application type **Web application**.
+3. Add both **authorized redirect URIs**:
+   - `http://localhost:5000/auth/callback`
+   - `https://web-production-f7a671.up.railway.app/auth/callback`
+4. Copy the client ID and secret into Railway env vars (or a local `.env`).
+
+If the app ever moves to a custom domain, add the new `https://<domain>/auth/callback` redirect URI — that is step 2 of the domain-move checklist in CLAUDE.md.
+
+**Sign-in policy** (data, not code — `lunchtag/auth/`):
+
+- Always: the Google account email must be a *verified* `@yale.edu` address (checked against the ID token claims; the `hd` parameter is only a login hint and is never trusted).
+- Optional whitelist: an `allowed_emails` table plus an enforcement toggle stored in the `app_settings` table (key `auth_whitelist_enforced`, default off). When on, only whitelisted yale.edu emails may sign in. No admin UI yet — manage it from a Python shell:
+
+```python
+from lunchtag.auth import store
+store.add_allowed_email("someone@yale.edu")
+store.list_allowed_emails()
+store.set_whitelist_enforced(True)   # or False
+```
+
 ## Data & persistence
 
 - SQLite file stored at `data/lunchtag.sqlite` (override with `LUNCHTAG_DATA_DIR`).
@@ -71,5 +100,6 @@ pytest
 - `lunchtag/domain/` data models
 - `lunchtag/storage/` SQLite repo
 - `lunchtag/engine/` scoring + generator
+- `lunchtag/auth/` Google sign-in, whitelist, settings
 - `lunchtag/ui/` Flask UI
 - `lunchtag/tests/` unit tests
