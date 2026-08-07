@@ -59,7 +59,7 @@ Instrument from day one: simple counters (pairings completed, opt-out rate, sign
 
 ## Current state and the proximate goal
 
-**State**: Local working prototype — pairing engine + local SQL DB with historic pairings. Nothing deployed. Repo may be empty or freshly created when you read this.
+**State** (updated 2026-08-07): Code lives at github.com/mmaneet/yda-member-portal (private, personal account — YDA org transfer pending, see Governance). Deployed on Railway (project `yda-member-portal`, service `web`, Postgres plugin provisioned) at https://web-production-f7a671.up.railway.app. CI smoke tests run on every push. Still pending: GitHub→Railway auto-deploy connection (needs Railway's GitHub app installed via dashboard), spending cap, Postgres data migration (app still uses ephemeral SQLite), auth. Historic pairing data remains in the local `data/lunchtag.sqlite` only — do not load member data into the deployed instance until auth exists.
 
 **The immediate task, in order. Work through this checklist with Maneet; don't skip ahead:**
 

@@ -6,7 +6,13 @@ The public YDA website (Squarespace) is separate and out of scope here — see [
 
 ## Deploy
 
-Push to `main` on GitHub → Railway auto-builds and deploys. A failed build never deploys; the site stays on the last good version. Secrets and connection strings live in Railway environment variables (see `.env.example` for the variable names). **Railway setup is in progress — this section will be updated once the deployment pipeline is live.**
+Push to `main` on GitHub → Railway auto-builds and deploys. A failed build never deploys; the site stays on the last good version. Secrets and connection strings live in Railway environment variables (see `.env.example` for the variable names).
+
+- Railway project: `yda-member-portal` (service `web` + Postgres plugin)
+- Live URL: https://web-production-f7a671.up.railway.app
+- Start command and restart policy live in `railway.json`; Python version is pinned in `.python-version`.
+
+**Current caveats**: the deployed app still writes to ephemeral SQLite (wiped on every redeploy) — migrating storage to the Railway Postgres is the next step. There is no auth yet, so no real member data may be loaded into the deployed instance.
 
 **Never commit the database, database dumps, member names/emails, or secrets.** The repo holds code and schema only.
 
