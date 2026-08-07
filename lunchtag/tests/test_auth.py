@@ -60,12 +60,78 @@ def test_login_page_reachable_when_auth_enabled(auth_env, db_path):
     assert b"Sign in with Google" in resp.data
 
 
-def test_signed_in_user_passes_gate(auth_env, db_path):
+def test_signed_in_member_sees_only_their_pages(auth_env, db_path):
     client = create_app(db_path).test_client()
     with client.session_transaction() as sess:
         sess["user_email"] = "someone@yale.edu"
-    assert client.get("/players").status_code == 200
-    assert b"someone@yale.edu" in client.get("/players").data
+    # Members are redirected away from admin pages to their own page.
+    for path in ("/players", "/generate", "/history", "/reset"):
+        resp = client.get(path)
+        assert resp.status_code == 302, path
+        assert resp.headers["Location"].endswith("/me"), path
+    resp = client.get("/me")
+    assert resp.status_code == 200
+    assert b"someone@yale.edu" in resp.data
+
+
+def test_signed_in_admin_sees_everything(auth_env, db_path):
+    store.set_role("boss@yale.edu", "admin", db_path=db_path)
+    client = create_app(db_path).test_client()
+    with client.session_transaction() as sess:
+        sess["user_email"] = "boss@yale.edu"
+    for path in ("/players", "/generate", "/history", "/reset", "/me"):
+        assert client.get(path).status_code == 200, path
+
+
+def test_member_pairing_page_shows_history(auth_env, db_path):
+    app = create_app(db_path)
+    with app.app_context():
+        from lunchtag.storage.repo import Repository
+
+        repo = Repository(db_path)
+        a = repo.add_player("Ava")
+        b = repo.add_player("Ben")
+        sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
+        repo.confirm_draft(sid, 0.0)
+        repo.close()
+    store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_email"] = "ava@yale.edu"
+    resp = client.get("/me")
+    assert resp.status_code == 200
+    assert b"Ben" in resp.data  # her partner
+    assert b"Your pairing this week" in resp.data
+
+
+def test_unlinked_member_gets_welcome_page(auth_env, db_path):
+    client = create_app(db_path).test_client()
+    with client.session_transaction() as sess:
+        sess["user_email"] = "new@yale.edu"
+    resp = client.get("/me")
+    assert resp.status_code == 200
+    assert b"isn't linked" in resp.data
+
+
+def test_store_roles_roundtrip(db_path):
+    assert store.get_role("x@yale.edu", db_path=db_path) == "member"
+    store.set_role("X@Yale.EDU", "admin", db_path=db_path)
+    assert store.get_role("x@yale.edu", db_path=db_path) == "admin"
+    store.set_role("x@yale.edu", "member", db_path=db_path)
+    assert store.get_role("x@yale.edu", db_path=db_path) == "member"
+    with pytest.raises(ValueError):
+        store.set_role("x@yale.edu", "superuser", db_path=db_path)
+
+
+def test_store_player_email_link_roundtrip(db_path):
+    assert store.get_player_id_for_email("a@yale.edu", db_path=db_path) is None
+    store.link_player_email("A@yale.edu", 7, db_path=db_path)
+    assert store.get_player_id_for_email("a@yale.edu", db_path=db_path) == 7
+    store.link_player_email("a@yale.edu", 9, db_path=db_path)  # relink
+    assert store.get_player_id_for_email("a@yale.edu", db_path=db_path) == 9
+    assert store.emails_by_player(db_path=db_path) == {9: "a@yale.edu"}
+    store.unlink_player(9, db_path=db_path)
+    assert store.get_player_id_for_email("a@yale.edu", db_path=db_path) is None
 
 
 def test_logout_clears_session(auth_env, db_path):

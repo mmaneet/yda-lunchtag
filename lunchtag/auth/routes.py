@@ -16,6 +16,7 @@ from flask import (
     Flask,
     current_app,
     flash,
+    g,
     redirect,
     render_template,
     request,
@@ -23,15 +24,32 @@ from flask import (
     url_for,
 )
 
+from lunchtag.auth import store
 from lunchtag.auth.policy import check_sign_in
 
 bp = Blueprint("auth", __name__)
 
 _OAUTH_CLIENT_KEY = "lunchtag_google_oauth"
 
+# Endpoints a signed-in non-admin may reach. Everything else is admin-only.
+MEMBER_ENDPOINTS = {"index", "my_pairings"}
+
 
 def auth_enabled() -> bool:
     return bool(current_app.config.get("GOOGLE_CLIENT_ID"))
+
+
+def current_role() -> str:
+    """'admin', 'member', or 'anonymous'. With auth disabled, everyone is admin
+    (local dev keeps full access)."""
+    if not auth_enabled():
+        return "admin"
+    email = session.get("user_email")
+    if not email:
+        return "anonymous"
+    if "user_role" not in g:
+        g.user_role = store.get_role(email, db_path=current_app.config.get("DB_PATH"))
+    return g.user_role
 
 
 def init_auth(app: Flask) -> None:
@@ -64,9 +82,20 @@ def init_auth(app: Flask) -> None:
             return None
         if endpoint == "static" or endpoint.startswith("auth."):
             return None
-        if session.get("user_email"):
-            return None
-        return redirect(url_for("auth.login"))
+        if not session.get("user_email"):
+            return redirect(url_for("auth.login"))
+        # Signed in: members only get their own pages; admins get everything.
+        if current_role() != "admin" and endpoint not in MEMBER_ENDPOINTS:
+            return redirect(url_for("my_pairings"))
+        return None
+
+    @app.context_processor
+    def inject_auth_context():
+        return {
+            "auth_on": auth_enabled(),
+            "user_email": session.get("user_email"),
+            "is_admin": current_role() == "admin",
+        }
 
 
 def _google_client():

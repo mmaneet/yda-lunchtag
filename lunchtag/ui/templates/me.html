@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+{% if player is none %}
+<section class="panel">
+  <h2>Welcome!</h2>
+  <p class="muted">
+    Your account isn't linked to a LunchTag player yet, so there's nothing to
+    show. Ask a board member to link your email to your player entry.
+  </p>
+</section>
+{% else %}
+<section class="panel">
+  <h2>Your pairing this week</h2>
+  {% if current %}
+  <p class="muted">Paired on {{ current.session.created_at.strftime('%B %-d, %Y') }}</p>
+  <div class="card">
+    <h3>
+      {% if current.partners %}
+        {{ current.partners | join(' · ') }}
+      {% else %}
+        No partner recorded for this round.
+      {% endif %}
+    </h3>
+  </div>
+  {% else %}
+  <p class="muted">No pairings yet — check back after the next round goes out.</p>
+  {% endif %}
+</section>
+
+{% if history|length > 1 %}
+<section class="panel">
+  <h2>Your pairing history</h2>
+  <table>
+    <thead>
+      <tr><th>Date</th><th>Paired with</th></tr>
+    </thead>
+    <tbody>
+      {% for item in history[1:] %}
+      <tr>
+        <td>{{ item.session.created_at.strftime('%B %-d, %Y') }}</td>
+        <td>{{ item.partners | join(' · ') if item.partners else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

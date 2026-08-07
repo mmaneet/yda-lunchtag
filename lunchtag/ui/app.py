@@ -4,9 +4,10 @@ import os
 import random
 from pathlib import Path
 
-from flask import Flask, flash, redirect, render_template, request, url_for, g
+from flask import Flask, flash, redirect, render_template, request, session, url_for, g
 
-from lunchtag.auth import init_auth
+from lunchtag.auth import auth_enabled, current_role, init_auth
+from lunchtag.auth import store as auth_store
 from lunchtag.config import default_db_path
 from lunchtag.engine.config import DEFAULT_GENERATION, DEFAULT_SCORING
 from lunchtag.engine.editing import swap_players
@@ -40,13 +41,55 @@ def create_app(db_path: Path | None = None) -> Flask:
 
     @app.route("/")
     def index():
+        if auth_enabled() and current_role() != "admin":
+            return redirect(url_for("my_pairings"))
         return redirect(url_for("generate"))
+
+    @app.route("/me")
+    def my_pairings():
+        repo = get_repo()
+        email = session.get("user_email")
+        player_id = (
+            auth_store.get_player_id_for_email(email, db_path=app.config["DB_PATH"])
+            if email
+            else None
+        )
+        player = None
+        history = []
+        if player_id is not None:
+            try:
+                player = repo.get_player(player_id)
+            except ValueError:
+                player = None
+        if player is not None:
+            players_map = {p.id: p.name for p in repo.list_players(include_deleted=True)}
+            for summary, member_ids in repo.player_history(player.id):
+                partners = [players_map.get(pid, f"#{pid}") for pid in member_ids if pid != player.id]
+                history.append({"session": summary, "partners": partners})
+        return render_template(
+            "me.html",
+            player=player,
+            current=history[0] if history else None,
+            history=history,
+        )
 
     @app.route("/players")
     def players():
         repo = get_repo()
         players = repo.list_players(include_deleted=True)
-        return render_template("players.html", players=players)
+        linked_emails = auth_store.emails_by_player(db_path=app.config["DB_PATH"])
+        return render_template("players.html", players=players, linked_emails=linked_emails)
+
+    @app.route("/players/<int:player_id>/email", methods=["POST"])
+    def link_player_email(player_id: int):
+        email = request.form.get("email", "").strip().lower()
+        if email:
+            auth_store.link_player_email(email, player_id, db_path=app.config["DB_PATH"])
+            flash("Email linked.")
+        else:
+            auth_store.unlink_player(player_id, db_path=app.config["DB_PATH"])
+            flash("Email unlinked.")
+        return redirect(url_for("players"))
 
     @app.route("/players/add", methods=["POST"])
     def add_player():

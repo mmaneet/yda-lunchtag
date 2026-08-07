@@ -40,6 +40,17 @@ def main() -> None:
     reset = sub.add_parser("reset")
     reset.add_argument("scope", choices=["history", "full"])
 
+    role = sub.add_parser("role")
+    role_sub = role.add_subparsers(dest="action")
+    role_sub.add_parser("list")
+    role_set = role_sub.add_parser("set")
+    role_set.add_argument("email")
+    role_set.add_argument("role", choices=["member", "admin"])
+
+    link = sub.add_parser("link")
+    link.add_argument("email")
+    link.add_argument("player_id", type=int)
+
     args = parser.parse_args()
 
     repo = Repository(default_db_path())
@@ -97,6 +108,22 @@ def main() -> None:
         else:
             repo.full_reset()
             print("Full reset complete.")
+    elif args.command == "role" and args.action == "set":
+        from lunchtag.auth import store
+
+        store.set_role(args.email, args.role)
+        print(f"{args.email.strip().lower()} is now {args.role}.")
+    elif args.command == "role" and args.action == "list":
+        from lunchtag.auth import store
+
+        for email, role_name in store.list_roles():
+            print(f"{email}: {role_name}")
+    elif args.command == "link":
+        from lunchtag.auth import store
+
+        player = repo.get_player(args.player_id)
+        store.link_player_email(args.email, args.player_id)
+        print(f"{args.email.strip().lower()} linked to {player.name} (id {player.id}).")
     else:
         parser.print_help()
 

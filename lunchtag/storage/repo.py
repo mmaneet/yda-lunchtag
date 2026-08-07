@@ -187,6 +187,35 @@ class Repository:
             groups=groups,
         )
 
+    def player_history(self, player_id: int) -> list[tuple[SessionSummary, tuple[int, ...]]]:
+        """Confirmed sessions containing this player, newest first, each with
+        the member ids of the group the player was in."""
+        rows = self.conn.execute(
+            """
+            SELECT s.id AS session_id, s.created_at, s.status, s.score, g.id AS group_id
+            FROM sessions s
+            JOIN groups g ON g.session_id = s.id
+            JOIN group_members gm ON gm.group_id = g.id
+            WHERE gm.player_id = ? AND s.status = 'confirmed'
+            ORDER BY s.created_at DESC
+            """,
+            (player_id,),
+        ).fetchall()
+        history: list[tuple[SessionSummary, tuple[int, ...]]] = []
+        for row in rows:
+            members = self.conn.execute(
+                "SELECT player_id FROM group_members WHERE group_id = ? ORDER BY player_id",
+                (row["group_id"],),
+            ).fetchall()
+            summary = SessionSummary(
+                id=row["session_id"],
+                created_at=_parse_dt(row["created_at"]),
+                status=row["status"],
+                score=row["score"],
+            )
+            history.append((summary, tuple(m["player_id"] for m in members)))
+        return history
+
     def reset_history(self) -> None:
         self.conn.execute("DELETE FROM sessions")
         self.conn.commit()

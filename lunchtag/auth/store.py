@@ -37,11 +37,34 @@ CREATE TABLE IF NOT EXISTS app_settings (
 )
 """
 
+# Roles: 'admin' sees the full dashboard; everyone else is 'member' (the
+# default — absence of a row means member) and sees only their own pairings.
+_CREATE_USER_ROLES = """
+CREATE TABLE IF NOT EXISTS user_roles (
+    email TEXT PRIMARY KEY,
+    role TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
+# Links a signed-in Google account to a player row so members can see their
+# own pairings. Multiple emails may point at one player; one email, one player.
+_CREATE_PLAYER_EMAILS = """
+CREATE TABLE IF NOT EXISTS player_emails (
+    email TEXT PRIMARY KEY,
+    player_id INTEGER NOT NULL
+)
+"""
+
+ROLES = ("member", "admin")
+
 
 def _open(db_path: Path | str | None = None):
     conn = connect(Path(db_path) if db_path is not None else default_db_path())
     conn.execute(_CREATE_ALLOWED_EMAILS)
     conn.execute(_CREATE_APP_SETTINGS)
+    conn.execute(_CREATE_USER_ROLES)
+    conn.execute(_CREATE_PLAYER_EMAILS)
     conn.commit()
     return conn
 
@@ -55,7 +78,7 @@ def get_setting(key: str, default: str | None = None, db_path=None) -> str | Non
         row = conn.execute(
             "SELECT value FROM app_settings WHERE key = ?", (key,)
         ).fetchone()
-        return row[0] if row is not None else default
+        return row["value"] if row is not None else default
     finally:
         conn.close()
 
@@ -116,6 +139,107 @@ def list_allowed_emails(db_path=None) -> list[str]:
         rows = conn.execute(
             "SELECT email FROM allowed_emails ORDER BY email"
         ).fetchall()
-        return [row[0] for row in rows]
+        return [row["email"] for row in rows]
+    finally:
+        conn.close()
+
+
+# --- user_roles -------------------------------------------------------------
+
+
+def get_role(email: str, db_path=None) -> str:
+    """Role for an email; 'member' when no row exists."""
+    conn = _open(db_path)
+    try:
+        row = conn.execute(
+            "SELECT role FROM user_roles WHERE email = ?",
+            (email.strip().lower(),),
+        ).fetchone()
+        return row["role"] if row is not None else "member"
+    finally:
+        conn.close()
+
+
+def set_role(email: str, role: str, db_path=None) -> None:
+    if role not in ROLES:
+        raise ValueError(f"Role must be one of {ROLES}, got {role!r}")
+    conn = _open(db_path)
+    try:
+        conn.execute(
+            "INSERT INTO user_roles (email, role, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT (email) DO UPDATE SET role = excluded.role, "
+            "updated_at = excluded.updated_at",
+            (email.strip().lower(), role, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_roles(db_path=None) -> list[tuple[str, str]]:
+    conn = _open(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT email, role FROM user_roles ORDER BY email"
+        ).fetchall()
+        return [(row["email"], row["role"]) for row in rows]
+    finally:
+        conn.close()
+
+
+# --- player_emails (account → player link) ---------------------------------
+
+
+def link_player_email(email: str, player_id: int, db_path=None) -> None:
+    conn = _open(db_path)
+    try:
+        conn.execute(
+            "INSERT INTO player_emails (email, player_id) VALUES (?, ?) "
+            "ON CONFLICT (email) DO UPDATE SET player_id = excluded.player_id",
+            (email.strip().lower(), player_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def unlink_player(player_id: int, db_path=None) -> None:
+    conn = _open(db_path)
+    try:
+        conn.execute("DELETE FROM player_emails WHERE player_id = ?", (player_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_player_id_for_email(email: str, db_path=None) -> int | None:
+    conn = _open(db_path)
+    try:
+        row = conn.execute(
+            "SELECT player_id FROM player_emails WHERE email = ?",
+            (email.strip().lower(),),
+        ).fetchone()
+        return row["player_id"] if row is not None else None
+    finally:
+        conn.close()
+
+
+def get_email_for_player(player_id: int, db_path=None) -> str | None:
+    conn = _open(db_path)
+    try:
+        row = conn.execute(
+            "SELECT email FROM player_emails WHERE player_id = ?",
+            (player_id,),
+        ).fetchone()
+        return row["email"] if row is not None else None
+    finally:
+        conn.close()
+
+
+def emails_by_player(db_path=None) -> dict[int, str]:
+    conn = _open(db_path)
+    try:
+        rows = conn.execute("SELECT email, player_id FROM player_emails").fetchall()
+        return {row["player_id"]: row["email"] for row in rows}
     finally:
         conn.close()

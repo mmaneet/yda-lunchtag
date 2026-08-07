@@ -16,18 +16,25 @@
           <p>Yale Debate Association · lunch pairings</p>
         </div>
       </div>
+      {% if is_admin %}
       <nav class="nav">
+        {% if auth_on %}<a href="{{ url_for('my_pairings') }}">My pairings</a>{% endif %}
         <a href="{{ url_for('players') }}">Players</a>
         <a href="{{ url_for('generate') }}">Generate</a>
         <a href="{{ url_for('history') }}">History</a>
         <a href="{{ url_for('reset_view') }}">Reset</a>
       </nav>
-      {% if session.get('user_email') %}
+      {% elif user_email %}
+      <nav class="nav">
+        <a href="{{ url_for('my_pairings') }}">My pairings</a>
+      </nav>
+      {% endif %}
+      {% if user_email %}
       <div class="auth-chip">
-        {{ session['user_email'] }} · <a href="{{ url_for('auth.logout') }}">Log out</a>
+        {{ user_email }} · <a href="{{ url_for('auth.logout') }}">Log out</a>
       </div>
       {% endif %}
-      {% if draft_nav %}
+      {% if draft_nav and is_admin %}
       <div class="draft-chip">
         Draft ready · <a href="{{ url_for('draft_view', session_id=draft_nav.session_id) }}">View</a>
       </div>

@@ -26,6 +26,12 @@
     </div>
 
     {% if not player.deleted %}
+    <form class="form-row" action="{{ url_for('link_player_email', player_id=player.id) }}" method="post">
+      <input type="email" name="email" placeholder="Link yale.edu email"
+             value="{{ linked_emails.get(player.id, '') }}">
+      <button type="submit">{% if linked_emails.get(player.id) %}Update{% else %}Link{% endif %}</button>
+    </form>
+
     <form class="form-row" action="{{ url_for('rename_player', player_id=player.id) }}" method="post">
       <input type="text" name="name" placeholder="Rename" required>
       <button type="submit">Rename</button>

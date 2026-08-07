@@ -73,6 +73,15 @@ store.list_allowed_emails()
 store.set_whitelist_enforced(True)   # or False
 ```
 
+**Roles** (`user_roles` table; default `member`): admins see the full dashboard (players, generate, history, reset); members see only their own page at `/me` — their current pairing and pairing history. With auth disabled (local dev), everyone is effectively admin. Manage roles with the CLI:
+
+```bash
+python -m lunchtag.cli role set someone@yale.edu admin
+python -m lunchtag.cli role list
+```
+
+For a member to see their pairings, their email must be linked to their player: admins do this on the Players page (each card has a "Link yale.edu email" field), or via `python -m lunchtag.cli link someone@yale.edu <player_id>`. Run any CLI command against production by setting `DATABASE_URL` to the Railway Postgres connection string.
+
 ## Data & persistence
 
 - SQLite file stored at `data/lunchtag.sqlite` (override with `LUNCHTAG_DATA_DIR`).
