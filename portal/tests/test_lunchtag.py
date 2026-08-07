@@ -26,6 +26,33 @@ def test_member_lunchtag_page_shows_history_widget(auth_env, db_path):
     assert b"This week" in resp.data
 
 
+def test_history_widget_stacks_cards_and_paginates(auth_env, db_path):
+    app = create_app(db_path)
+    repo = Repository(db_path)
+    a = repo.add_player("Ava")
+    b = repo.add_player("Ben")
+    for _ in range(8):
+        sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
+        repo.confirm_draft(sid, 0.0)
+    repo.upsert_profile(a.id, display_name="Ava")
+    repo.close()
+    store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_email"] = "ava@yale.edu"
+    html = client.get("/lunchtag").get_data(as_text=True)
+    # 5 cards max: one current (navy) + 4 past (grey), then Load more.
+    assert html.count('class="widget-card') == 5
+    assert html.count('widget-card current') == 1
+    assert "Load more (3 older)" in html
+    assert "show=10" in html
+    html = client.get("/lunchtag?show=10").get_data(as_text=True)
+    assert html.count('class="widget-card') == 8
+    assert "Load more" not in html
+    # Bad show values fall back safely.
+    assert client.get("/lunchtag?show=banana").status_code == 200
+
+
 def test_lunchtag_page_has_no_profile_edit_form(auth_env, db_path):
     app = create_app(db_path)
     client = onboarded_member(app, "alice@yale.edu", "Alice")

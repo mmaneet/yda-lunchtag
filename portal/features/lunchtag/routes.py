@@ -53,10 +53,16 @@ def me():
         ),
         key=lambda item: item[1].lower(),
     )
+    try:
+        show = int(request.args.get("show", 5))
+    except ValueError:
+        show = 5
+    show = max(1, min(show, 500))
     return render_template(
         "lunchtag/me.html",
         player=player,
         history=history,
+        show=show,
         others=others,
         strikes=[(pid, names.get(pid, f"#{pid}")) for pid in my_prefs["strike"]],
         boost=(

@@ -359,35 +359,26 @@ th, td {
   align-self: flex-start;
 }
 
-.widget-current {
+.widget-card {
   border: 1px solid var(--border);
-  border-left: 3px solid var(--yale-blue);
+  border-left: 3px solid #b9b9b9;
   border-radius: 6px;
   padding: 10px 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
-.widget-current strong {
+.widget-card.current {
+  border-left-color: var(--yale-blue);
+}
+
+.widget-card strong {
   display: block;
   margin: 2px 0;
 }
 
-.widget-history {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.widget-history li {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.widget-history li:last-child {
-  border-bottom: none;
+.load-more {
+  display: inline-block;
+  margin-top: 4px;
 }
 
 .onboarding {

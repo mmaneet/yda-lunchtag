@@ -83,20 +83,21 @@
     <section class="panel widget">
       <h2>Your pairings</h2>
       {% if history %}
-      <div class="widget-current">
-        <p class="muted">This week</p>
-        <strong>{{ history[0].partners | join(' · ') if history[0].partners else '—' }}</strong>
-        <p class="muted">{{ history[0].session.created_at.strftime('%B %-d, %Y') }}</p>
+      {% for item in history[:show] %}
+      <div class="widget-card {{ 'current' if loop.first }}">
+        <p class="muted">
+          {% if loop.first %}This week{% else %}{{ item.session.created_at.strftime('%B %-d, %Y') }}{% endif %}
+        </p>
+        <strong>{{ item.partners | join(' · ') if item.partners else '—' }}</strong>
+        {% if loop.first %}
+        <p class="muted">{{ item.session.created_at.strftime('%B %-d, %Y') }}</p>
+        {% endif %}
       </div>
-      {% if history | length > 1 %}
-      <ul class="widget-history">
-        {% for item in history[1:] %}
-        <li>
-          <span>{{ item.partners | join(' · ') if item.partners else '—' }}</span>
-          <span class="muted">{{ item.session.created_at.strftime('%b %-d') }}</span>
-        </li>
-        {% endfor %}
-      </ul>
+      {% endfor %}
+      {% if history | length > show %}
+      <a class="button ghost load-more" href="{{ url_for('lunchtag.me', show=show + 5) }}">
+        Load more ({{ history | length - show }} older)
+      </a>
       {% endif %}
       {% else %}
       <p class="muted">No pairings yet — you'll see your first lunch partner here once the next round goes out.</p>
