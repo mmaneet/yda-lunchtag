@@ -78,6 +78,17 @@ Sign-in is Google OAuth (OpenID Connect via Authlib), restricted to yale.edu acc
 
 **Strikes and boosts** (`player_preferences` table): members can strike players (never paired — unlimited, private: no admin UI shows them) and boost one player (~doubles pairing odds; new boost replaces old). Strikes are hard engine constraints; when they make perfect pairs impossible — even with an even roster — the generator falls back to groups of 3.
 
+## Notifications (email + Slack)
+
+When an admin confirms a draft, every member with a linked email gets a pairing email (partner names + their profile info), and a summary posts to Slack. A Railway cron service (`railway.cron.json`: Sundays 23:00 UTC) runs `python -m portal.cli remind-admins`, emailing every admin a reminder to push new pairings.
+
+Two independent safety layers, both off by default:
+
+1. **Master switch** (config-as-data): `python -m portal.cli notifications on|off|status`.
+2. **Credentials**: with no `SMTP_*` / `SLACK_WEBHOOK_URL` env vars, everything is a dry-run — counted and logged, nothing sent. Works with any SMTP provider (Gmail app password on a role account, Resend, SendGrid…); the Slack side needs an Incoming Webhook URL from api.slack.com. `PORTAL_BASE_URL` controls the links in messages.
+
+The cron service must have "Config file path" set to `railway.cron.json` in its Railway settings (otherwise it would inherit the web start command from `railway.json`), plus the same `DATABASE_URL` reference and `SMTP_*` vars as the web service.
+
 ## Data & persistence
 
 - Local: SQLite at `data/lunchtag.sqlite` (override dir with `LUNCHTAG_DATA_DIR`). Production: Postgres via `DATABASE_URL`.

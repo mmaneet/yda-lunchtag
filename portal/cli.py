@@ -51,6 +51,11 @@ def main() -> None:
     link.add_argument("email")
     link.add_argument("player_id", type=int)
 
+    notif = sub.add_parser("notifications")
+    notif.add_argument("action", choices=["on", "off", "status"])
+
+    sub.add_parser("remind-admins")
+
     args = parser.parse_args()
 
     repo = Repository(default_db_path())
@@ -126,6 +131,23 @@ def main() -> None:
         player = repo.get_player(args.player_id)
         store.link_player_email(args.email, args.player_id)
         print(f"{args.email.strip().lower()} linked to {player.name} (id {player.id}).")
+    elif args.command == "notifications":
+        from portal import notifications
+
+        if args.action == "status":
+            state = "on" if notifications.notifications_enabled() else "off"
+            print(f"Notifications are {state}.")
+        else:
+            notifications.set_notifications_enabled(args.action == "on")
+            print(f"Notifications turned {args.action}.")
+    elif args.command == "remind-admins":
+        from portal import notifications
+
+        result = notifications.send_admin_reminder()
+        print(
+            f"Admin reminder: {result['admins']} admins, "
+            f"{result['sent']} sent, {result['dry_run']} dry-run."
+        )
     else:
         parser.print_help()
 

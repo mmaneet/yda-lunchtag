@@ -11,6 +11,7 @@ import random
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
 
+from portal import notifications
 from portal.auth import store as auth_store
 from portal.features.lunchtag.engine.config import DEFAULT_GENERATION, DEFAULT_SCORING
 from portal.features.lunchtag.engine.editing import swap_players
@@ -325,6 +326,21 @@ def admin_confirm_draft(session_id: int):
     )
     repo.confirm_draft(session_id, breakdown.total)
     flash("Draft confirmed and saved to history.")
+    if notifications.notifications_enabled(current_app.config["DB_PATH"]):
+        try:
+            summary = notifications.send_pairing_notifications(
+                repo, session_id, db_path=current_app.config["DB_PATH"]
+            )
+            flash(
+                f"Notifications: {summary['emails_sent']} emails sent, "
+                f"{summary['emails_dry_run']} dry-run, "
+                f"{summary['members_without_email']} members without a linked email; "
+                f"Slack: {summary['slack']}."
+            )
+        except Exception as exc:
+            flash(f"Pairings saved, but sending notifications failed: {exc}")
+    else:
+        flash("Notifications are off — enable with: python -m portal.cli notifications on")
     return redirect(url_for("lunchtag.admin_history"))
 
 

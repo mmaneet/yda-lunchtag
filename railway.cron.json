@@ -1,0 +1,8 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "deploy": {
+    "startCommand": "python -m portal.cli remind-admins",
+    "cronSchedule": "0 23 * * 0",
+    "restartPolicyType": "NEVER"
+  }
+}
