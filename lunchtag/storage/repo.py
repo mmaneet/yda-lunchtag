@@ -47,12 +47,13 @@ class Repository:
     # Players
     def add_player(self, name: str) -> Player:
         now = _now_iso()
-        cur = self.conn.execute(
-            "INSERT INTO players (name, active, deleted, created_at, updated_at) VALUES (?, 1, 0, ?, ?)",
+        row = self.conn.execute(
+            "INSERT INTO players (name, active, deleted, created_at, updated_at) "
+            "VALUES (?, 1, 0, ?, ?) RETURNING id",
             (name.strip(), now, now),
-        )
+        ).fetchone()
         self.conn.commit()
-        return self.get_player(cur.lastrowid)
+        return self.get_player(row["id"])
 
     def get_player(self, player_id: int) -> Player:
         row = self.conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
@@ -62,16 +63,16 @@ class Repository:
 
     def list_players(self, include_deleted: bool = False) -> list[Player]:
         if include_deleted:
-            rows = self.conn.execute("SELECT * FROM players ORDER BY name COLLATE NOCASE").fetchall()
+            rows = self.conn.execute("SELECT * FROM players ORDER BY lower(name)").fetchall()
         else:
             rows = self.conn.execute(
-                "SELECT * FROM players WHERE deleted = 0 ORDER BY name COLLATE NOCASE"
+                "SELECT * FROM players WHERE deleted = 0 ORDER BY lower(name)"
             ).fetchall()
         return [_player_from_row(row) for row in rows]
 
     def list_active_players(self) -> list[Player]:
         rows = self.conn.execute(
-            "SELECT * FROM players WHERE active = 1 AND deleted = 0 ORDER BY name COLLATE NOCASE"
+            "SELECT * FROM players WHERE active = 1 AND deleted = 0 ORDER BY lower(name)"
         ).fetchall()
         return [_player_from_row(row) for row in rows]
 
@@ -108,11 +109,12 @@ class Repository:
 
     def create_draft(self, rng_seed: int, score: float, groups: Iterable[Iterable[int]]) -> int:
         now = _now_iso()
-        cur = self.conn.execute(
-            "INSERT INTO sessions (created_at, status, rng_seed, score) VALUES (?, 'draft', ?, ?)",
+        row = self.conn.execute(
+            "INSERT INTO sessions (created_at, status, rng_seed, score) "
+            "VALUES (?, 'draft', ?, ?) RETURNING id",
             (now, rng_seed, score),
-        )
-        session_id = cur.lastrowid
+        ).fetchone()
+        session_id = row["id"]
         self._insert_groups(session_id, groups)
         self.conn.commit()
         return session_id
@@ -206,7 +208,7 @@ class Repository:
             JOIN groups g ON gm1.group_id = g.id
             JOIN sessions s ON g.session_id = s.id
             WHERE s.status = 'confirmed'
-            GROUP BY a, b
+            GROUP BY gm1.player_id, gm2.player_id
             """
         ).fetchall()
         met_count: dict[tuple[int, int], int] = {}
@@ -224,11 +226,11 @@ class Repository:
 
     def _insert_groups(self, session_id: int, groups: Iterable[Iterable[int]]) -> None:
         for idx, members in enumerate(groups):
-            cur = self.conn.execute(
-                "INSERT INTO groups (session_id, group_index) VALUES (?, ?)",
+            row = self.conn.execute(
+                "INSERT INTO groups (session_id, group_index) VALUES (?, ?) RETURNING id",
                 (session_id, idx),
-            )
-            group_id = cur.lastrowid
+            ).fetchone()
+            group_id = row["id"]
             for player_id in members:
                 self.conn.execute(
                     "INSERT INTO group_members (group_id, player_id) VALUES (?, ?)",

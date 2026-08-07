@@ -1,10 +1,84 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 
+# One schema, two dialects. SQLite is used locally and in CI; Postgres is used
+# in production whenever DATABASE_URL is set (Railway injects it).
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS players (
+    id {pk},
+    name TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 
-def connect(db_path: Path) -> sqlite3.Connection:
+CREATE TABLE IF NOT EXISTS sessions (
+    id {pk},
+    created_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    rng_seed {bigint} NOT NULL,
+    score {float} NOT NULL,
+    notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS groups (
+    id {pk},
+    session_id INTEGER NOT NULL,
+    group_index INTEGER NOT NULL,
+    FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    FOREIGN KEY(player_id) REFERENCES players(id),
+    UNIQUE(group_id, player_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_groups_session ON groups(session_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_player ON group_members(player_id);
+"""
+
+_SQLITE_DIALECT = {"pk": "INTEGER PRIMARY KEY AUTOINCREMENT", "bigint": "INTEGER", "float": "REAL"}
+_POSTGRES_DIALECT = {"pk": "SERIAL PRIMARY KEY", "bigint": "BIGINT", "float": "DOUBLE PRECISION"}
+
+
+class PostgresConnection:
+    """Minimal wrapper so the repository's sqlite-style SQL runs on Postgres.
+
+    Translates `?` placeholders to `%s`. Queries must not contain a literal `?`.
+    Rows come back as dicts, matching sqlite3.Row's by-name access.
+    """
+
+    dialect = "postgres"
+
+    def __init__(self, dsn: str) -> None:
+        import psycopg
+        from psycopg.rows import dict_row
+
+        self._conn = psycopg.connect(dsn, row_factory=dict_row)
+
+    def execute(self, sql: str, params: tuple = ()):
+        return self._conn.execute(sql.replace("?", "%s"), params)
+
+    def commit(self) -> None:
+        self._conn.commit()
+
+    def close(self) -> None:
+        self._conn.close()
+
+
+def connect(db_path: Path):
+    """Connect to Postgres if DATABASE_URL is set, else to the local SQLite file."""
+    dsn = os.environ.get("DATABASE_URL")
+    if dsn:
+        return PostgresConnection(dsn)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -12,45 +86,12 @@ def connect(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
-def init_db(conn: sqlite3.Connection) -> None:
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS players (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            active INTEGER NOT NULL DEFAULT 1,
-            deleted INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_at TEXT NOT NULL,
-            status TEXT NOT NULL,
-            rng_seed INTEGER NOT NULL,
-            score REAL NOT NULL,
-            notes TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS groups (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id INTEGER NOT NULL,
-            group_index INTEGER NOT NULL,
-            FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS group_members (
-            group_id INTEGER NOT NULL,
-            player_id INTEGER NOT NULL,
-            FOREIGN KEY(group_id) REFERENCES groups(id) ON DELETE CASCADE,
-            FOREIGN KEY(player_id) REFERENCES players(id),
-            UNIQUE(group_id, player_id)
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
-        CREATE INDEX IF NOT EXISTS idx_groups_session ON groups(session_id);
-        CREATE INDEX IF NOT EXISTS idx_group_members_player ON group_members(player_id);
-        """
-    )
+def init_db(conn) -> None:
+    if getattr(conn, "dialect", "sqlite") == "postgres":
+        script = _SCHEMA.format(**_POSTGRES_DIALECT)
+        for statement in script.split(";"):
+            if statement.strip():
+                conn.execute(statement)
+    else:
+        conn.executescript(_SCHEMA.format(**_SQLITE_DIALECT))
     conn.commit()
