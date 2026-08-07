@@ -37,13 +37,22 @@ def me():
     if player is None or profile is None or not profile.onboarded:
         return redirect(url_for("profile.welcome"))
     names = repo.display_names()
+    raw_history = repo.player_history(player.id)
     history = [
         {
             "session": summary,
             "partners": [names.get(pid, f"#{pid}") for pid in member_ids if pid != player.id],
         }
-        for summary, member_ids in repo.player_history(player.id)
+        for summary, member_ids in raw_history
     ]
+    # This week's partners, with their profiles for the hero card.
+    current_partners = []
+    if raw_history:
+        for pid in raw_history[0][1]:
+            if pid != player.id:
+                current_partners.append(
+                    {"name": names.get(pid, f"#{pid}"), "profile": repo.get_profile(pid)}
+                )
     my_prefs = repo.list_preferences(player.id)
     others = sorted(
         (
@@ -61,7 +70,9 @@ def me():
     return render_template(
         "lunchtag/me.html",
         player=player,
-        history=history,
+        current=history[0] if history else None,
+        current_partners=current_partners,
+        past=history[1:],
         show=show,
         others=others,
         strikes=[(pid, names.get(pid, f"#{pid}")) for pid in my_prefs["strike"]],

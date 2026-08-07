@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from itertools import combinations
 from pathlib import Path
 from typing import Iterable
 
@@ -290,6 +291,15 @@ class Repository:
             "UPDATE sessions SET status = 'confirmed', score = ?, created_at = ? WHERE id = ?",
             (score, now, session_id),
         )
+        # A boost is a one-shot wish: once the pair actually happens, it
+        # resets automatically so the next round isn't skewed by it.
+        for group in self._load_groups(session_id):
+            for a, b in combinations(group.member_ids, 2):
+                self.conn.execute(
+                    "DELETE FROM player_preferences WHERE kind = 'boost' AND "
+                    "((player_id = ? AND target_id = ?) OR (player_id = ? AND target_id = ?))",
+                    (a, b, b, a),
+                )
         self.conn.commit()
 
     def get_draft(self) -> Draft | None:

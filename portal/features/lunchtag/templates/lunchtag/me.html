@@ -9,6 +9,34 @@
   </p>
 </section>
 {% else %}
+<section class="panel hero-pairing">
+  <h2>This week's pairing</h2>
+  {% if current %}
+  <p class="muted">{{ current.session.created_at.strftime('%B %-d, %Y') }}</p>
+  <div class="hero-partners">
+    {% for partner in current_partners %}
+    <div class="hero-partner">
+      <h3>{{ partner.name }}</h3>
+      {% if partner.profile %}
+      <p class="muted">
+        {% if partner.profile.class_year %}Class of {{ partner.profile.class_year }}{% endif %}
+        {% if partner.profile.class_year and partner.profile.residential_college %} · {% endif %}
+        {{ partner.profile.residential_college or '' }}
+      </p>
+      <dl class="profile-facts">
+        {% if partner.profile.birthday %}<dt>Birthday</dt><dd>{{ partner.profile.birthday }}</dd>{% endif %}
+        {% if partner.profile.dining_hall %}<dt>Favorite dining hall</dt><dd>{{ partner.profile.dining_hall }}</dd>{% endif %}
+        {% if partner.profile.fun_facts %}<dt>Fun facts</dt><dd>{{ partner.profile.fun_facts }}</dd>{% endif %}
+      </dl>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No pairings yet — you'll see your first lunch partner here once the next round goes out.</p>
+  {% endif %}
+</section>
+
 <div class="profile-layout">
   <div class="profile-main">
     <div class="pref-widgets">
@@ -20,7 +48,7 @@
           </svg>
         </div>
         <h3>Strike</h3>
-        <p class="muted">Never get paired with someone.</p>
+        <p class="muted">Select any member(s) whom you would like to avoid being paired with.</p>
         {% if strikes %}
         <ul class="pref-list">
           {% for pid, name in strikes %}
@@ -43,7 +71,7 @@
           </select>
           <button class="danger" type="submit">Strike</button>
         </form>
-        <p class="muted pref-note">No explanation needed — admins cannot see your strikes.</p>
+        <p class="muted pref-note">No explanation needed. Unlimited strikes. Board members/admins cannot see strikes, they are fully anonymous.</p>
       </section>
 
       <section class="panel pref-widget">
@@ -74,33 +102,28 @@
           </select>
           <button type="submit">Boost</button>
         </form>
-        <p class="muted pref-note">One boost at a time — a new one replaces the old.</p>
+        <p class="muted pref-note">Only one player can be selected at a time.</p>
       </section>
     </div>
   </div>
 
   <aside class="profile-side">
     <section class="panel widget">
-      <h2>Your pairings</h2>
-      {% if history %}
-      {% for item in history[:show] %}
-      <div class="widget-card {{ 'current' if loop.first }}">
-        <p class="muted">
-          {% if loop.first %}This week{% else %}{{ item.session.created_at.strftime('%B %-d, %Y') }}{% endif %}
-        </p>
-        <strong>{{ item.partners | join(' · ') if item.partners else '—' }}</strong>
-        {% if loop.first %}
+      <h2>Past pairings</h2>
+      {% if past %}
+      {% for item in past[:show] %}
+      <div class="widget-card">
         <p class="muted">{{ item.session.created_at.strftime('%B %-d, %Y') }}</p>
-        {% endif %}
+        <strong>{{ item.partners | join(' · ') if item.partners else '—' }}</strong>
       </div>
       {% endfor %}
-      {% if history | length > show %}
+      {% if past | length > show %}
       <a class="button ghost load-more" href="{{ url_for('lunchtag.me', show=show + 5) }}">
-        Load more ({{ history | length - show }} older)
+        Load more ({{ past | length - show }} older)
       </a>
       {% endif %}
       {% else %}
-      <p class="muted">No pairings yet — you'll see your first lunch partner here once the next round goes out.</p>
+      <p class="muted">Nothing here yet — past weeks will pile up as rounds go out.</p>
       {% endif %}
     </section>
   </aside>

@@ -21,9 +21,33 @@ def test_member_lunchtag_page_shows_history_widget(auth_env, db_path):
         sess["user_email"] = "ava@yale.edu"
     resp = client.get("/lunchtag")
     assert resp.status_code == 200
-    assert b"Ben" in resp.data  # her partner, in the widget
-    assert b"Your pairings" in resp.data
-    assert b"This week" in resp.data
+    assert b"Ben" in resp.data  # her partner, in the hero card
+    assert b"This week's pairing" in resp.data
+    assert b"Past pairings" in resp.data
+
+
+def test_hero_card_shows_partner_profile(auth_env, db_path):
+    app = create_app(db_path)
+    repo = Repository(db_path)
+    a = repo.add_player("Ava")
+    b = repo.add_player("Ben")
+    sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
+    repo.confirm_draft(sid, 0.0)
+    repo.upsert_profile(a.id, display_name="Ava")
+    repo.upsert_profile(
+        b.id, display_name="Ben", class_year="2028", residential_college="Morse",
+        dining_hall="Commons", fun_facts="Collects rare stamps.",
+    )
+    repo.close()
+    store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_email"] = "ava@yale.edu"
+    html = client.get("/lunchtag").get_data(as_text=True)
+    assert "Class of 2028" in html
+    assert "Morse" in html
+    assert "Commons" in html
+    assert "Collects rare stamps." in html
 
 
 def test_history_widget_stacks_cards_and_paginates(auth_env, db_path):
@@ -41,16 +65,36 @@ def test_history_widget_stacks_cards_and_paginates(auth_env, db_path):
     with client.session_transaction() as sess:
         sess["user_email"] = "ava@yale.edu"
     html = client.get("/lunchtag").get_data(as_text=True)
-    # 5 cards max: one current (navy) + 4 past (grey), then Load more.
+    # Hero shows the newest round; sidebar stacks the 7 past ones, 5 max.
+    assert 'class="hero-pairing' in html or "hero-pairing" in html
     assert html.count('class="widget-card') == 5
-    assert html.count('widget-card current') == 1
-    assert "Load more (3 older)" in html
+    assert "Load more (2 older)" in html
     assert "show=10" in html
     html = client.get("/lunchtag?show=10").get_data(as_text=True)
-    assert html.count('class="widget-card') == 8
+    assert html.count('class="widget-card') == 7
     assert "Load more" not in html
     # Bad show values fall back safely.
     assert client.get("/lunchtag?show=banana").status_code == 200
+
+
+def test_boost_resets_after_pair_happens(auth_env, db_path):
+    repo = Repository(db_path)
+    a = repo.add_player("Ava")
+    b = repo.add_player("Ben")
+    c = repo.add_player("Cara")
+    repo.add_preference(a.id, b.id, "boost")     # will be paired -> resets
+    repo.add_preference(c.id, a.id, "boost")     # not paired -> stays
+    repo.add_preference(a.id, b.id, "strike")    # strikes are NOT reset
+    sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
+    repo.confirm_draft(sid, 0.0)
+    prefs = repo.fetch_preferences()
+    pair_ab = (min(a.id, b.id), max(a.id, b.id))
+    pair_ca = (min(c.id, a.id), max(c.id, a.id))
+    assert pair_ca in prefs.boosted       # untouched boost survives
+    assert pair_ab in prefs.forbidden     # strike survives confirmation
+    raw = repo.list_preferences(a.id)
+    assert raw["boost"] == []             # Ava's boost on Ben was consumed
+    repo.close()
 
 
 def test_lunchtag_page_has_no_profile_edit_form(auth_env, db_path):
@@ -77,7 +121,7 @@ def test_member_can_strike_and_remove(auth_env, db_path):
     assert len(repo.fetch_preferences().forbidden) == 2
     repo.close()
     html = alice.get("/lunchtag").get_data(as_text=True)
-    assert "admins cannot see your strikes" in html
+    assert "fully anonymous" in html
     assert "Bob" in html and "Cara" in html
     alice.post("/lunchtag/strike/remove", data={"target_id": ids["Bob"]})
     repo = Repository(db_path)

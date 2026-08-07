@@ -572,3 +572,36 @@ th, td {
   letter-spacing: 0.06em;
   color: var(--muted);
 }
+
+/* --- Hero pairing card + footer -------------------------------------------- */
+
+.hero-pairing {
+  border-left: 4px solid var(--yale-blue);
+  margin-bottom: 20px;
+}
+
+.hero-partners {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-top: 8px;
+}
+
+.hero-partner {
+  flex: 1 1 240px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--surface);
+}
+
+.hero-partner h3 {
+  margin: 0 0 2px;
+}
+
+.site-footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 28px 16px 20px;
+}
