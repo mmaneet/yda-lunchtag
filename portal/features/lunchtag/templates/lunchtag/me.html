@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+{% if player is none %}
+<section class="panel">
+  <h2>LunchTag</h2>
+  <p class="muted">
+    Auth is disabled (local dev), so there is no signed-in member to show.
+    Sign-in is required for the member LunchTag screen.
+  </p>
+</section>
+{% else %}
+<div class="profile-layout">
+  <div class="profile-main">
+    <div class="pref-widgets">
+      <section class="panel pref-widget">
+        <div class="pref-icon strike-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="5" y1="5" x2="19" y2="19"></line>
+            <line x1="19" y1="5" x2="5" y2="19"></line>
+          </svg>
+        </div>
+        <h3>Strike</h3>
+        <p class="muted">Never get paired with someone.</p>
+        {% if strikes %}
+        <ul class="pref-list">
+          {% for pid, name in strikes %}
+          <li>
+            <span>{{ name }}</span>
+            <form action="{{ url_for('lunchtag.remove_strike') }}" method="post">
+              <input type="hidden" name="target_id" value="{{ pid }}">
+              <button class="ghost pref-remove" type="submit" aria-label="Remove strike on {{ name }}">✕</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        <form action="{{ url_for('lunchtag.add_strike') }}" method="post" class="pref-form">
+          <select name="target_id" required>
+            <option value="">Choose a player…</option>
+            {% for pid, name in others %}
+            <option value="{{ pid }}">{{ name }}</option>
+            {% endfor %}
+          </select>
+          <button class="danger" type="submit">Strike</button>
+        </form>
+        <p class="muted pref-note">No explanation needed — admins cannot see your strikes.</p>
+      </section>
+
+      <section class="panel pref-widget">
+        <div class="pref-icon boost-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+            <path d="M12 2l2.9 6.26 6.6.7-4.95 4.5 1.4 6.54L12 16.7 6.05 20l1.4-6.54L2.5 8.96l6.6-.7z"></path>
+          </svg>
+        </div>
+        <h3>Boost</h3>
+        <p class="muted">Double your odds of pairing with someone.</p>
+        {% if boost %}
+        <ul class="pref-list">
+          <li>
+            <span>{{ boost[1] }}</span>
+            <form action="{{ url_for('lunchtag.remove_boost') }}" method="post">
+              <input type="hidden" name="target_id" value="{{ boost[0] }}">
+              <button class="ghost pref-remove" type="submit" aria-label="Remove boost on {{ boost[1] }}">✕</button>
+            </form>
+          </li>
+        </ul>
+        {% endif %}
+        <form action="{{ url_for('lunchtag.add_boost') }}" method="post" class="pref-form">
+          <select name="target_id" required>
+            <option value="">Choose a player…</option>
+            {% for pid, name in others %}
+            <option value="{{ pid }}">{{ name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Boost</button>
+        </form>
+        <p class="muted pref-note">One boost at a time — a new one replaces the old.</p>
+      </section>
+    </div>
+  </div>
+
+  <aside class="profile-side">
+    <section class="panel widget">
+      <h2>Your pairings</h2>
+      {% if history %}
+      <div class="widget-current">
+        <p class="muted">This week</p>
+        <strong>{{ history[0].partners | join(' · ') if history[0].partners else '—' }}</strong>
+        <p class="muted">{{ history[0].session.created_at.strftime('%B %-d, %Y') }}</p>
+      </div>
+      {% if history | length > 1 %}
+      <ul class="widget-history">
+        {% for item in history[1:] %}
+        <li>
+          <span>{{ item.partners | join(' · ') if item.partners else '—' }}</span>
+          <span class="muted">{{ item.session.created_at.strftime('%b %-d') }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% else %}
+      <p class="muted">No pairings yet — you'll see your first lunch partner here once the next round goes out.</p>
+      {% endif %}
+    </section>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}

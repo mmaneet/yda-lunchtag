@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+{% if player is none %}
+<section class="panel">
+  <h2>Profile</h2>
+  <p class="muted">
+    Auth is disabled (local dev), so there is no signed-in member to show.
+    Sign-in is required for the profile screen.
+  </p>
+</section>
+{% else %}
+<div class="profile-main">
+  <section class="panel">
+    <h2>{{ profile.display_name or player.name }}</h2>
+    <p class="muted">
+      {% if profile.class_year %}Class of {{ profile.class_year }}{% endif %}
+      {% if profile.class_year and profile.residential_college %} · {% endif %}
+      {{ profile.residential_college or '' }}
+    </p>
+    <dl class="profile-facts">
+      {% if profile.birthday %}<dt>Birthday</dt><dd>{{ profile.birthday }}</dd>{% endif %}
+      {% if profile.dining_hall %}<dt>Favorite dining hall</dt><dd>{{ profile.dining_hall }}</dd>{% endif %}
+      {% if profile.fun_facts %}<dt>Fun facts</dt><dd>{{ profile.fun_facts }}</dd>{% endif %}
+    </dl>
+  </section>
+
+  <details class="panel edit-profile">
+    <summary>Edit profile</summary>
+    <p class="muted">Everything here is optional — share as much or as little as you like.</p>
+    <form action="{{ url_for('profile.update') }}" method="post" class="stacked-form">
+      <label>
+        Display name
+        <input type="text" name="display_name" value="{{ profile.display_name or player.name }}" required>
+      </label>
+      <label>
+        Class year
+        <input type="text" name="class_year" inputmode="numeric" value="{{ profile.class_year or '' }}">
+      </label>
+      <label>
+        Residential college
+        <input type="text" name="residential_college" value="{{ profile.residential_college or '' }}" list="colleges">
+      </label>
+      <label>
+        Birthday
+        <input type="text" name="birthday" placeholder="e.g. March 14" value="{{ profile.birthday or '' }}">
+      </label>
+      <label>
+        Favorite dining hall
+        <input type="text" name="dining_hall" value="{{ profile.dining_hall or '' }}">
+      </label>
+      <label>
+        Fun facts
+        <textarea name="fun_facts" rows="3" placeholder="Anything you'd like your lunch partners to know!">{{ profile.fun_facts or '' }}</textarea>
+      </label>
+      <button type="submit">Save</button>
+    </form>
+    <datalist id="colleges">
+      {% for college in colleges %}
+      <option value="{{ college }}"></option>
+      {% endfor %}
+    </datalist>
+  </details>
+</div>
+{% endif %}
+{% endblock %}

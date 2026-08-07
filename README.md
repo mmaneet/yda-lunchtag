@@ -1,8 +1,10 @@
-# YDA Member Portal — LunchTag
+# YDA Member Portal
 
-Member portal for the Yale Debate Association. The first feature is **LunchTag**, a weekly lunch-pairing system: it generates draft pairings, lets you edit and confirm them, and keeps history so people aren't repeatedly paired together.
+Member resources portal for the Yale Debate Association. Features live as tabs; the first (and currently only) live feature is **LunchTag**, a weekly lunch-pairing system: it generates draft pairings honoring member strikes/boosts, lets admins edit and confirm them, and keeps history so people aren't repeatedly paired together. YDBoba, Events Schedule, Tournament Registration, and Reimbursements are visible as "(Coming Soon!)" tabs.
 
 The public YDA website (Squarespace) is separate and out of scope here — see [CLAUDE.md](CLAUDE.md) for the full architecture, governance rules, and roadmap.
+
+**Never commit the database, database dumps, member names/emails, or secrets.** The repo holds code and schema only.
 
 ## Deploy
 
@@ -10,11 +12,8 @@ Push to `main` on GitHub → Railway auto-builds and deploys. A failed build nev
 
 - Railway project: `yda-member-portal` (service `web` + Postgres plugin)
 - Live URL: https://web-production-f7a671.up.railway.app
-- Start command and restart policy live in `railway.json`; Python version is pinned in `.python-version`.
-
-**Current caveats**: the deployed app still writes to ephemeral SQLite (wiped on every redeploy) — migrating storage to the Railway Postgres is the next step. There is no auth yet, so no real member data may be loaded into the deployed instance.
-
-**Never commit the database, database dumps, member names/emails, or secrets.** The repo holds code and schema only.
+- Start command (`gunicorn portal.app:app`) and restart policy live in `railway.json`; Python version is pinned in `.python-version`.
+- In production the app uses Postgres (`DATABASE_URL` set); locally and in CI it uses SQLite. Same schema, same code.
 
 ## Run locally
 
@@ -32,61 +31,56 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Open http://127.0.0.1:5000 in your browser.
+Open http://127.0.0.1:5000 in your browser. With no `GOOGLE_CLIENT_ID` set, auth is disabled and you get full admin access locally.
 
 ### CLI (optional)
 
 ```bash
-python -m lunchtag.cli players add "Ava"
-python -m lunchtag.cli generate
-python -m lunchtag.cli draft show
-python -m lunchtag.cli draft confirm
-python -m lunchtag.cli history list
+python -m portal.cli players add "Ava"
+python -m portal.cli generate
+python -m portal.cli draft show
+python -m portal.cli draft confirm
+python -m portal.cli history list
+python -m portal.cli role set someone@yale.edu admin
+python -m portal.cli link someone@yale.edu 12
 ```
+
+Run any CLI command against production by setting `DATABASE_URL` to the Railway Postgres connection string.
+
+## Project layout — how features work
+
+```
+portal/
+  app.py                  # app factory + TABS registry (add new features here)
+  auth/                   # Google sign-in, roles, whitelist, email→player links
+  storage/                # shared schema (db.py) + repository (repo.py)
+  domain/models.py        # shared dataclasses
+  templates/, static/     # app shell: base.html (tab bar), login, onboarding
+  features/
+    profile/              # blueprint: /profile, /welcome — identity only
+    lunchtag/             # blueprint: /lunchtag — pairings, strikes/boosts, engine/, admin pages
+  tests/
+```
+
+**To add a feature X**: copy the shape of `portal/features/lunchtag/` — a `routes.py` with one blueprint (`template_folder="templates"`, templates under `templates/x/`), register it in `portal/app.py`, flip its `TABS` entry to `enabled: True`, add `portal/tests/test_x.py`. Admin-only routes must have endpoint names starting with `admin_` — the auth gate blocks members from any such endpoint. New tables: `CREATE TABLE IF NOT EXISTS` in a feature-local store module (see `portal/auth/store.py`) or in `portal/storage/db.py` if shared.
 
 ## Auth
 
-Sign-in is Google OAuth (OpenID Connect via Authlib), restricted to yale.edu accounts. It is **off by default**: if `GOOGLE_CLIENT_ID` is unset, the app runs with no login at all (current local-dev behavior). When it is set, every page requires sign-in except `/login`, `/auth/*`, and static files.
+Sign-in is Google OAuth (OpenID Connect via Authlib), restricted to yale.edu accounts. It is **off by default**: if `GOOGLE_CLIENT_ID` is unset, the app runs with no login at all (local dev). When set, every page requires sign-in except `/login`, `/auth/*`, and static files.
 
-**Env vars** (see `.env.example`): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. In production these live in Railway environment variables.
+**Env vars** (see `.env.example`): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; optional `DUMMY_LOGIN_EMAIL` (testing backdoor — never set once real member data is loaded).
 
-**Google Cloud Console setup** (one-time):
+**Google Cloud Console** (one-time, already done): OAuth 2.0 Client ID (Web application) with redirect URIs `http://localhost:5000/auth/callback` and `https://web-production-f7a671.up.railway.app/auth/callback`. If the app moves to a custom domain, add `https://<domain>/auth/callback` — step 2 of the domain-move checklist in CLAUDE.md.
 
-1. Create (or pick) a Google Cloud project → APIs & Services → OAuth consent screen. External user type is fine; add the app name and a contact email.
-2. APIs & Services → Credentials → Create Credentials → **OAuth 2.0 Client ID**, application type **Web application**.
-3. Add both **authorized redirect URIs**:
-   - `http://localhost:5000/auth/callback`
-   - `https://web-production-f7a671.up.railway.app/auth/callback`
-4. Copy the client ID and secret into Railway env vars (or a local `.env`).
+**Sign-in policy** (data, not code — `portal/auth/`): the email must be a *verified* `@yale.edu` address (from ID-token claims; `hd` is only a hint). Optional whitelist: `allowed_emails` table + enforcement toggle in `app_settings` (key `auth_whitelist_enforced`, default off), managed via `portal.auth.store` functions.
 
-If the app ever moves to a custom domain, add the new `https://<domain>/auth/callback` redirect URI — that is step 2 of the domain-move checklist in CLAUDE.md.
+**Roles** (`user_roles` table; default `member`): members see the Profile and LunchTag tabs only; admins additionally get the admin sub-nav on LunchTag pages (Players, Generate, History, Reset). First-time members onboard at `/welcome` (creates + links their player row); profile extras live in `player_profiles`.
 
-**Sign-in policy** (data, not code — `lunchtag/auth/`):
-
-- Always: the Google account email must be a *verified* `@yale.edu` address (checked against the ID token claims; the `hd` parameter is only a login hint and is never trusted).
-- Optional whitelist: an `allowed_emails` table plus an enforcement toggle stored in the `app_settings` table (key `auth_whitelist_enforced`, default off). When on, only whitelisted yale.edu emails may sign in. No admin UI yet — manage it from a Python shell:
-
-```python
-from lunchtag.auth import store
-store.add_allowed_email("someone@yale.edu")
-store.list_allowed_emails()
-store.set_whitelist_enforced(True)   # or False
-```
-
-**Roles** (`user_roles` table; default `member`): admins see the full dashboard (players, generate, history, reset); members see only their own profile page at `/me` — profile details on the left, a pairing-history widget on the right, and no top nav. First-time members get an onboarding screen at `/welcome` (display name, class year, residential college) which creates and links their player row; optional extras (birthday, favorite dining hall, fun facts) live in the `player_profiles` table and are editable via the collapsed "Edit profile" section.
-
-**Strikes and boosts** (`player_preferences` table): members can strike players (never be paired with them — unlimited, private: no admin UI shows them) and boost one player (roughly doubles the odds of being paired — a new boost replaces the old). The engine treats strikes as hard constraints (`strike_penalty`) and boosts as a scoring bonus (`boost_bonus`, see `lunchtag/engine/config.py`). When strikes make perfect 2-person pairings impossible — even with an even roster — the generator falls back to groups of 3, so trios are now valid at any roster parity. With auth disabled (local dev), everyone is effectively admin. Manage roles with the CLI:
-
-```bash
-python -m lunchtag.cli role set someone@yale.edu admin
-python -m lunchtag.cli role list
-```
-
-For a member to see their pairings, their email must be linked to their player: admins do this on the Players page (each card has a "Link yale.edu email" field), or via `python -m lunchtag.cli link someone@yale.edu <player_id>`. Run any CLI command against production by setting `DATABASE_URL` to the Railway Postgres connection string.
+**Strikes and boosts** (`player_preferences` table): members can strike players (never paired — unlimited, private: no admin UI shows them) and boost one player (~doubles pairing odds; new boost replaces old). Strikes are hard engine constraints; when they make perfect pairs impossible — even with an even roster — the generator falls back to groups of 3.
 
 ## Data & persistence
 
-- SQLite file stored at `data/lunchtag.sqlite` (override with `LUNCHTAG_DATA_DIR`).
+- Local: SQLite at `data/lunchtag.sqlite` (override dir with `LUNCHTAG_DATA_DIR`). Production: Postgres via `DATABASE_URL`.
 - Drafts are stored with status `draft`; only `confirmed` sessions count toward history.
 
 ## Scoring weights
@@ -97,20 +91,12 @@ Pairing score is the sum of penalties for every unordered pair inside each group
 - **Recency penalty**: if last met within `recency_window_days`, add `recency_weight * (1 - days/window)`
 - **Fairness penalty**: discourage pairing two high-degree players via `fairness_weight * (deg_a + deg_b)/(2*max_degree)`
 - **Trio penalty**: adds `trio_penalty` for any group of 3
+- **Strike/boost/singleton**: `strike_penalty` (hard constraint), `boost_bonus` (attraction), `singleton_penalty` (last-resort lone group)
 
-Defaults live in `lunchtag/engine/config.py`.
+Defaults live in `portal/features/lunchtag/engine/config.py`.
 
 ## Tests
 
 ```bash
 pytest
 ```
-
-## Project layout
-
-- `lunchtag/domain/` data models
-- `lunchtag/storage/` SQLite repo
-- `lunchtag/engine/` scoring + generator
-- `lunchtag/auth/` Google sign-in, whitelist, settings
-- `lunchtag/ui/` Flask UI
-- `lunchtag/tests/` unit tests

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>YDA Member Portal · Yale Debate Association</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='yda-logo.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="brand">
+        <img class="logo" src="{{ url_for('static', filename='yda-logo.png') }}" alt="Yale Debate Association logo">
+        <div>
+          <h1>YDA Members</h1>
+          <p>Yale Debate Association · member resources</p>
+        </div>
+      </div>
+      {% if user_email or not auth_on %}
+      <nav class="tabs">
+        {% for tab in tabs %}
+          {% if tab.enabled %}
+            <a class="tab {{ 'active' if tab.blueprint == active_blueprint }}"
+               href="{{ url_for(tab.endpoint) }}">{{ tab.label }}</a>
+          {% else %}
+            <span class="tab disabled">{{ tab.label }} <em>(Coming Soon!)</em></span>
+          {% endif %}
+        {% endfor %}
+      </nav>
+      {% endif %}
+      {% if user_email %}
+      <div class="auth-chip">
+        {{ user_email }} · <a href="{{ url_for('auth.logout') }}">Log out</a>
+      </div>
+      {% endif %}
+      {% if draft_nav and is_admin %}
+      <div class="draft-chip">
+        Draft ready · <a href="{{ url_for('lunchtag.admin_draft_view', session_id=draft_nav.session_id) }}">View</a>
+      </div>
+      {% endif %}
+    </header>
+    {% if is_admin and active_blueprint == 'lunchtag' %}
+    <nav class="subnav">
+      <span class="subnav-label">Admin</span>
+      <a href="{{ url_for('lunchtag.admin_players') }}">Players</a>
+      <a href="{{ url_for('lunchtag.admin_generate') }}">Generate</a>
+      <a href="{{ url_for('lunchtag.admin_history') }}">History</a>
+      <a href="{{ url_for('lunchtag.admin_reset_view') }}">Reset</a>
+    </nav>
+    {% endif %}
+
+    <main class="content">
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <div class="flash">
+            {% for message in messages %}
+              <div class="flash-item">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

@@ -1,4 +1,4 @@
-from lunchtag.ui.app import app
+from portal.app import app
 
 
 if __name__ == "__main__":

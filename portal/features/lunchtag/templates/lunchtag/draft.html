@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Draft pairing</h2>
+  <p class="muted">Draft score: {{ '%.2f'|format(score) }} · Seed {{ draft.rng_seed }}</p>
+  <div class="groups">
+    {% for group in groups %}
+      <div class="group-card">
+        <h4>Group {{ loop.index }} · {{ group.size }} people</h4>
+        <ul>
+          {% for member_id in group.member_ids %}
+            <li>{{ players_map[member_id].name }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel">
+  <h3>Edit draft</h3>
+  <form class="form-row" action="{{ url_for('lunchtag.admin_draft_swap', session_id=draft.session_id) }}" method="post">
+    <select name="player_a" required>
+      <option value="" disabled selected>Player A</option>
+      {% for player in active_players %}
+        <option value="{{ player.id }}">{{ player.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="player_b" required>
+      <option value="" disabled selected>Player B</option>
+      {% for player in active_players %}
+        <option value="{{ player.id }}">{{ player.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Swap players</button>
+  </form>
+  <p class="muted">Swap members between groups to adjust pairings. Trio membership changes via swaps.</p>
+</section>
+
+<section class="panel">
+  <h3>Repeat edges</h3>
+  {% if repeat_pairs %}
+    <table>
+      <thead>
+        <tr><th>Pair</th><th>Met count</th><th>Last met</th></tr>
+      </thead>
+      <tbody>
+      {% for a, b, count, last_met in repeat_pairs %}
+        <tr>
+          <td>{{ a }} + {{ b }}</td>
+          <td>{{ count }}</td>
+          <td>{{ last_met.strftime('%Y-%m-%d') if last_met else '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No repeats in this draft.</p>
+  {% endif %}
+</section>
+
+<section class="panel actions">
+  <form action="{{ url_for('lunchtag.admin_confirm_draft', session_id=draft.session_id) }}" method="post">
+    <button type="submit">Confirm draft</button>
+  </form>
+  <form action="{{ url_for('lunchtag.admin_discard_draft', session_id=draft.session_id) }}" method="post">
+    <button class="ghost" type="submit">Discard draft</button>
+  </form>
+  <form action="{{ url_for('lunchtag.admin_generate_draft') }}" method="post">
+    <button class="ghost" type="submit">Generate again</button>
+  </form>
+</section>
+{% endblock %}

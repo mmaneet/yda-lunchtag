@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Generate draft</h2>
+  <p class="muted">Active players: {{ active_players | length }}</p>
+  <div class="tag-list">
+    {% for player in active_players %}
+      <span class="tag">{{ player.name }}</span>
+    {% endfor %}
+  </div>
+  <form class="form-row" action="{{ url_for('lunchtag.admin_generate_draft') }}" method="post">
+    <button type="submit">Generate draft</button>
+  </form>
+</section>
+
+{% if draft %}
+<section class="panel">
+  <h3>Current draft</h3>
+  <p class="muted">Draft score: {{ '%.2f'|format(draft.score) }}</p>
+  <a class="button" href="{{ url_for('lunchtag.admin_draft_view', session_id=draft.session_id) }}">View draft</a>
+</section>
+{% endif %}
+{% endblock %}

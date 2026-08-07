@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lunchtag.storage.db import PostgresConnection, init_db
+from portal.storage.db import PostgresConnection, init_db
 
 TABLES = {
     "players": ["id", "name", "active", "deleted", "created_at", "updated_at"],
