@@ -15,6 +15,12 @@ from lunchtag.engine.generator import generate_best, validate_groups
 from lunchtag.engine.scoring import repeat_edges, score_groups
 from lunchtag.storage.repo import Repository
 
+RESIDENTIAL_COLLEGES = [
+    "Benjamin Franklin", "Berkeley", "Branford", "Davenport", "Ezra Stiles",
+    "Grace Hopper", "Jonathan Edwards", "Morse", "Pauli Murray", "Pierson",
+    "Saybrook", "Silliman", "Timothy Dwight", "Trumbull",
+]
+
 
 def create_app(db_path: Path | None = None) -> Flask:
     app = Flask(__name__)
@@ -45,33 +51,94 @@ def create_app(db_path: Path | None = None) -> Flask:
             return redirect(url_for("my_pairings"))
         return redirect(url_for("generate"))
 
+    def _linked_player(repo: Repository):
+        email = session.get("user_email")
+        if not email:
+            return None
+        player_id = auth_store.get_player_id_for_email(email, db_path=app.config["DB_PATH"])
+        if player_id is None:
+            return None
+        try:
+            return repo.get_player(player_id)
+        except ValueError:
+            return None
+
     @app.route("/me")
     def my_pairings():
         repo = get_repo()
         email = session.get("user_email")
-        player_id = (
-            auth_store.get_player_id_for_email(email, db_path=app.config["DB_PATH"])
-            if email
-            else None
-        )
-        player = None
-        history = []
-        if player_id is not None:
-            try:
-                player = repo.get_player(player_id)
-            except ValueError:
-                player = None
-        if player is not None:
-            players_map = {p.id: p.name for p in repo.list_players(include_deleted=True)}
-            for summary, member_ids in repo.player_history(player.id):
-                partners = [players_map.get(pid, f"#{pid}") for pid in member_ids if pid != player.id]
-                history.append({"session": summary, "partners": partners})
+        if not email:
+            # Auth disabled (local dev): nothing member-specific to show.
+            return render_template("me.html", player=None, profile=None, history=[])
+        player = _linked_player(repo)
+        profile = repo.get_profile(player.id) if player else None
+        if player is None or profile is None or not profile.onboarded:
+            return redirect(url_for("welcome"))
+        names = repo.display_names()
+        history = [
+            {
+                "session": summary,
+                "partners": [names.get(pid, f"#{pid}") for pid in member_ids if pid != player.id],
+            }
+            for summary, member_ids in repo.player_history(player.id)
+        ]
         return render_template(
             "me.html",
             player=player,
-            current=history[0] if history else None,
+            profile=profile,
             history=history,
+            colleges=RESIDENTIAL_COLLEGES,
         )
+
+    @app.route("/welcome", methods=["GET", "POST"])
+    def welcome():
+        repo = get_repo()
+        email = session.get("user_email")
+        if not email:
+            return redirect(url_for("index"))
+        player = _linked_player(repo)
+        profile = repo.get_profile(player.id) if player else None
+        if profile is not None and profile.onboarded:
+            return redirect(url_for("my_pairings"))
+        if request.method == "POST":
+            display_name = request.form.get("display_name", "").strip()
+            if not display_name:
+                flash("Please tell us what to call you.")
+                return redirect(url_for("welcome"))
+            if player is None:
+                player = repo.add_player(display_name)
+                auth_store.link_player_email(email, player.id, db_path=app.config["DB_PATH"])
+            repo.upsert_profile(
+                player.id,
+                display_name=display_name,
+                class_year=request.form.get("class_year", "").strip() or None,
+                residential_college=request.form.get("residential_college", "").strip() or None,
+            )
+            flash("Welcome to LunchTag!")
+            return redirect(url_for("my_pairings"))
+        return render_template(
+            "welcome.html",
+            suggested_name=player.name if player else (session.get("user_name") or ""),
+            colleges=RESIDENTIAL_COLLEGES,
+        )
+
+    @app.route("/me/profile", methods=["POST"])
+    def update_profile():
+        repo = get_repo()
+        player = _linked_player(repo)
+        if player is None:
+            return redirect(url_for("welcome"))
+        fields = {}
+        for name in ("display_name", "class_year", "residential_college",
+                     "birthday", "dining_hall", "fun_facts"):
+            if name in request.form:
+                fields[name] = request.form.get(name, "").strip() or None
+        if fields.get("display_name", "skip") is None:
+            flash("Display name can't be empty.")
+            return redirect(url_for("my_pairings"))
+        repo.upsert_profile(player.id, **fields)
+        flash("Profile updated.")
+        return redirect(url_for("my_pairings"))
 
     @app.route("/players")
     def players():

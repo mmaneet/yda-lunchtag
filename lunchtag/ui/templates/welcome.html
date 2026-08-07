@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel onboarding">
+  <h2>Welcome to LunchTag!</h2>
+  <p class="muted">
+    LunchTag pairs you with another YDA member for lunch each week.
+    Tell us a little about yourself to get started.
+  </p>
+  <form action="{{ url_for('welcome') }}" method="post" class="stacked-form">
+    <label>
+      Preferred display name
+      <input type="text" name="display_name" value="{{ suggested_name }}" required>
+    </label>
+    <label>
+      Class year
+      <input type="text" name="class_year" inputmode="numeric" placeholder="e.g. 2029">
+    </label>
+    <label>
+      Residential college
+      <select name="residential_college">
+        <option value="">Choose one…</option>
+        {% for college in colleges %}
+        <option value="{{ college }}">{{ college }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Let's go</button>
+  </form>
+</section>
+{% endblock %}

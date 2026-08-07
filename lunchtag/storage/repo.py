@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-from lunchtag.domain.models import Draft, Group, PairingStats, Player, Session
+from lunchtag.domain.models import Draft, Group, PairingStats, Player, PlayerProfile, Session
 from lunchtag.storage.db import connect, init_db
 
 
@@ -101,6 +101,83 @@ class Repository:
             (now, player_id),
         )
         self.conn.commit()
+
+    # Profiles
+    _PROFILE_FIELDS = (
+        "display_name",
+        "class_year",
+        "residential_college",
+        "birthday",
+        "dining_hall",
+        "fun_facts",
+    )
+
+    def get_profile(self, player_id: int) -> PlayerProfile | None:
+        row = self.conn.execute(
+            "SELECT * FROM player_profiles WHERE player_id = ?", (player_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return PlayerProfile(
+            player_id=row["player_id"],
+            display_name=row["display_name"],
+            class_year=row["class_year"],
+            residential_college=row["residential_college"],
+            birthday=row["birthday"],
+            dining_hall=row["dining_hall"],
+            fun_facts=row["fun_facts"],
+            onboarded=bool(row["onboarded"]),
+        )
+
+    def upsert_profile(self, player_id: int, *, onboarded: bool = True, **fields) -> PlayerProfile:
+        """Create or update a profile. Only keys in _PROFILE_FIELDS are
+        accepted; missing keys keep their current value."""
+        unknown = set(fields) - set(self._PROFILE_FIELDS)
+        if unknown:
+            raise ValueError(f"Unknown profile fields: {sorted(unknown)}")
+        current = self.get_profile(player_id)
+        merged = {
+            name: fields.get(name, getattr(current, name) if current else None)
+            for name in self._PROFILE_FIELDS
+        }
+        now = _now_iso()
+        self.conn.execute(
+            "INSERT INTO player_profiles (player_id, display_name, class_year, "
+            "residential_college, birthday, dining_hall, fun_facts, onboarded, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (player_id) DO UPDATE SET "
+            "display_name = excluded.display_name, class_year = excluded.class_year, "
+            "residential_college = excluded.residential_college, birthday = excluded.birthday, "
+            "dining_hall = excluded.dining_hall, fun_facts = excluded.fun_facts, "
+            "onboarded = excluded.onboarded, updated_at = excluded.updated_at",
+            (
+                player_id,
+                merged["display_name"],
+                merged["class_year"],
+                merged["residential_college"],
+                merged["birthday"],
+                merged["dining_hall"],
+                merged["fun_facts"],
+                1 if onboarded else 0,
+                now,
+            ),
+        )
+        self.conn.commit()
+        profile = self.get_profile(player_id)
+        assert profile is not None
+        return profile
+
+    def display_names(self) -> dict[int, str]:
+        """player_id -> best display name (profile display_name, else roster name)."""
+        names = {p.id: p.name for p in self.list_players(include_deleted=True)}
+        rows = self.conn.execute(
+            "SELECT player_id, display_name FROM player_profiles "
+            "WHERE display_name IS NOT NULL"
+        ).fetchall()
+        for row in rows:
+            if row["display_name"]:
+                names[row["player_id"]] = row["display_name"]
+        return names
 
     # Sessions + groups
     def clear_drafts(self) -> None:

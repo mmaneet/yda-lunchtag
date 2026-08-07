@@ -24,10 +24,6 @@
         <a href="{{ url_for('history') }}">History</a>
         <a href="{{ url_for('reset_view') }}">Reset</a>
       </nav>
-      {% elif user_email %}
-      <nav class="nav">
-        <a href="{{ url_for('my_pairings') }}">My pairings</a>
-      </nav>
       {% endif %}
       {% if user_email %}
       <div class="auth-chip">

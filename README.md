@@ -73,7 +73,7 @@ store.list_allowed_emails()
 store.set_whitelist_enforced(True)   # or False
 ```
 
-**Roles** (`user_roles` table; default `member`): admins see the full dashboard (players, generate, history, reset); members see only their own page at `/me` — their current pairing and pairing history. With auth disabled (local dev), everyone is effectively admin. Manage roles with the CLI:
+**Roles** (`user_roles` table; default `member`): admins see the full dashboard (players, generate, history, reset); members see only their own profile page at `/me` — profile details on the left, a pairing-history widget on the right, and no top nav. First-time members get an onboarding screen at `/welcome` (display name, class year, residential college) which creates and links their player row; optional extras (birthday, favorite dining hall, fun facts) live in the `player_profiles` table and are editable on the profile page. With auth disabled (local dev), everyone is effectively admin. Manage roles with the CLI:
 
 ```bash
 python -m lunchtag.cli role set someone@yale.edu admin

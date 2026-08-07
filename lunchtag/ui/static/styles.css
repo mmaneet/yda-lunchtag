@@ -297,3 +297,106 @@ th, td {
     padding: 1rem 1.2rem;
   }
 }
+
+/* --- Member profile screen ------------------------------------------------ */
+
+.profile-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.profile-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.profile-facts {
+  margin: 12px 0 0;
+}
+
+.profile-facts dt {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-top: 10px;
+}
+
+.profile-facts dd {
+  margin: 2px 0 0;
+}
+
+.stacked-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.stacked-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.stacked-form input,
+.stacked-form select,
+.stacked-form textarea {
+  font: inherit;
+  color: var(--ink);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.stacked-form button {
+  align-self: flex-start;
+}
+
+.widget-current {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--yale-blue);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.widget-current strong {
+  display: block;
+  margin: 2px 0;
+}
+
+.widget-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.widget-history li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.widget-history li:last-child {
+  border-bottom: none;
+}
+
+.onboarding {
+  max-width: 480px;
+  margin: 40px auto;
+}
+
+@media (max-width: 800px) {
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+}

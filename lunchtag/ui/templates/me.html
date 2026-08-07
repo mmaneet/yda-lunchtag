@@ -2,48 +2,91 @@
 {% block content %}
 {% if player is none %}
 <section class="panel">
-  <h2>Welcome!</h2>
+  <h2>Member view</h2>
   <p class="muted">
-    Your account isn't linked to a LunchTag player yet, so there's nothing to
-    show. Ask a board member to link your email to your player entry.
+    Auth is disabled (local dev), so there is no signed-in member to show.
+    Sign-in is required for the member profile screen.
   </p>
 </section>
 {% else %}
-<section class="panel">
-  <h2>Your pairing this week</h2>
-  {% if current %}
-  <p class="muted">Paired on {{ current.session.created_at.strftime('%B %-d, %Y') }}</p>
-  <div class="card">
-    <h3>
-      {% if current.partners %}
-        {{ current.partners | join(' · ') }}
-      {% else %}
-        No partner recorded for this round.
-      {% endif %}
-    </h3>
-  </div>
-  {% else %}
-  <p class="muted">No pairings yet — check back after the next round goes out.</p>
-  {% endif %}
-</section>
+<div class="profile-layout">
+  <div class="profile-main">
+    <section class="panel">
+      <h2>{{ profile.display_name or player.name }}</h2>
+      <p class="muted">
+        {% if profile.class_year %}Class of {{ profile.class_year }}{% endif %}
+        {% if profile.class_year and profile.residential_college %} · {% endif %}
+        {{ profile.residential_college or '' }}
+      </p>
+      <dl class="profile-facts">
+        {% if profile.birthday %}<dt>Birthday</dt><dd>{{ profile.birthday }}</dd>{% endif %}
+        {% if profile.dining_hall %}<dt>Favorite dining hall</dt><dd>{{ profile.dining_hall }}</dd>{% endif %}
+        {% if profile.fun_facts %}<dt>Fun facts</dt><dd>{{ profile.fun_facts }}</dd>{% endif %}
+      </dl>
+    </section>
 
-{% if history|length > 1 %}
-<section class="panel">
-  <h2>Your pairing history</h2>
-  <table>
-    <thead>
-      <tr><th>Date</th><th>Paired with</th></tr>
-    </thead>
-    <tbody>
-      {% for item in history[1:] %}
-      <tr>
-        <td>{{ item.session.created_at.strftime('%B %-d, %Y') }}</td>
-        <td>{{ item.partners | join(' · ') if item.partners else '—' }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-{% endif %}
+    <section class="panel">
+      <h2>About you</h2>
+      <p class="muted">Everything here is optional — share as much or as little as you like.</p>
+      <form action="{{ url_for('update_profile') }}" method="post" class="stacked-form">
+        <label>
+          Display name
+          <input type="text" name="display_name" value="{{ profile.display_name or player.name }}" required>
+        </label>
+        <label>
+          Class year
+          <input type="text" name="class_year" inputmode="numeric" value="{{ profile.class_year or '' }}">
+        </label>
+        <label>
+          Residential college
+          <input type="text" name="residential_college" value="{{ profile.residential_college or '' }}" list="colleges">
+        </label>
+        <label>
+          Birthday
+          <input type="text" name="birthday" placeholder="e.g. March 14" value="{{ profile.birthday or '' }}">
+        </label>
+        <label>
+          Favorite dining hall
+          <input type="text" name="dining_hall" value="{{ profile.dining_hall or '' }}">
+        </label>
+        <label>
+          Fun facts
+          <textarea name="fun_facts" rows="3" placeholder="Anything you'd like your lunch partners to know!">{{ profile.fun_facts or '' }}</textarea>
+        </label>
+        <button type="submit">Save</button>
+      </form>
+      <datalist id="colleges">
+        {% for college in colleges %}
+        <option value="{{ college }}"></option>
+        {% endfor %}
+      </datalist>
+    </section>
+  </div>
+
+  <aside class="profile-side">
+    <section class="panel widget">
+      <h2>Your pairings</h2>
+      {% if history %}
+      <div class="widget-current">
+        <p class="muted">This week</p>
+        <strong>{{ history[0].partners | join(' · ') if history[0].partners else '—' }}</strong>
+        <p class="muted">{{ history[0].session.created_at.strftime('%B %-d, %Y') }}</p>
+      </div>
+      {% if history | length > 1 %}
+      <ul class="widget-history">
+        {% for item in history[1:] %}
+        <li>
+          <span>{{ item.partners | join(' · ') if item.partners else '—' }}</span>
+          <span class="muted">{{ item.session.created_at.strftime('%b %-d') }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% else %}
+      <p class="muted">No pairings yet — you'll see your first lunch partner here once the next round goes out.</p>
+      {% endif %}
+    </section>
+  </aside>
+</div>
 {% endif %}
 {% endblock %}

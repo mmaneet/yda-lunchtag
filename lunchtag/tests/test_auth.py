@@ -69,6 +69,7 @@ def test_signed_in_member_sees_only_their_pages(auth_env, db_path):
         resp = client.get(path)
         assert resp.status_code == 302, path
         assert resp.headers["Location"].endswith("/me"), path
+    client.post("/welcome", data={"display_name": "Someone"})
     resp = client.get("/me")
     assert resp.status_code == 200
     assert b"someone@yale.edu" in resp.data
@@ -79,38 +80,101 @@ def test_signed_in_admin_sees_everything(auth_env, db_path):
     client = create_app(db_path).test_client()
     with client.session_transaction() as sess:
         sess["user_email"] = "boss@yale.edu"
-    for path in ("/players", "/generate", "/history", "/reset", "/me"):
+    for path in ("/players", "/generate", "/history", "/reset"):
         assert client.get(path).status_code == 200, path
+    # Admins are members too: /me sends them through onboarding first.
+    assert client.get("/me").headers["Location"].endswith("/welcome")
 
 
-def test_member_pairing_page_shows_history(auth_env, db_path):
+def test_member_profile_page_shows_history_widget(auth_env, db_path):
     app = create_app(db_path)
-    with app.app_context():
-        from lunchtag.storage.repo import Repository
+    from lunchtag.storage.repo import Repository
 
-        repo = Repository(db_path)
-        a = repo.add_player("Ava")
-        b = repo.add_player("Ben")
-        sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
-        repo.confirm_draft(sid, 0.0)
-        repo.close()
+    repo = Repository(db_path)
+    a = repo.add_player("Ava")
+    b = repo.add_player("Ben")
+    sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
+    repo.confirm_draft(sid, 0.0)
+    repo.upsert_profile(a.id, display_name="Ava")
+    repo.close()
     store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
     client = app.test_client()
     with client.session_transaction() as sess:
         sess["user_email"] = "ava@yale.edu"
     resp = client.get("/me")
     assert resp.status_code == 200
-    assert b"Ben" in resp.data  # her partner
-    assert b"Your pairing this week" in resp.data
+    assert b"Ben" in resp.data  # her partner, in the widget
+    assert b"Your pairings" in resp.data
+    assert b"This week" in resp.data
 
 
-def test_unlinked_member_gets_welcome_page(auth_env, db_path):
+def test_first_login_gets_onboarding(auth_env, db_path):
     client = create_app(db_path).test_client()
     with client.session_transaction() as sess:
         sess["user_email"] = "new@yale.edu"
+        sess["user_name"] = "New Member"
+    # /me bounces to onboarding until the profile exists.
+    resp = client.get("/me")
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/welcome")
+    resp = client.get("/welcome")
+    assert resp.status_code == 200
+    assert b"Welcome to LunchTag!" in resp.data
+    assert b"New Member" in resp.data  # Google name prefilled
+
+
+def test_onboarding_creates_player_and_profile(auth_env, db_path):
+    app = create_app(db_path)
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_email"] = "new@yale.edu"
+    resp = client.post(
+        "/welcome",
+        data={"display_name": "Newbie", "class_year": "2029", "residential_college": "Berkeley"},
+    )
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/me")
     resp = client.get("/me")
     assert resp.status_code == 200
-    assert b"isn't linked" in resp.data
+    assert b"Newbie" in resp.data
+    assert b"Class of 2029" in resp.data
+    assert b"Berkeley" in resp.data
+    assert b"No pairings yet" in resp.data  # empty history
+    # Player row exists, is linked, and re-visiting /welcome bounces to /me.
+    player_id = store.get_player_id_for_email("new@yale.edu", db_path=db_path)
+    assert player_id is not None
+    assert client.get("/welcome").status_code == 302
+
+
+def test_member_can_update_optional_profile_fields(auth_env, db_path):
+    app = create_app(db_path)
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_email"] = "new@yale.edu"
+    client.post("/welcome", data={"display_name": "Newbie"})
+    resp = client.post(
+        "/me/profile",
+        data={
+            "display_name": "Newbie",
+            "birthday": "March 14",
+            "dining_hall": "Berkeley",
+            "fun_facts": "I once debated for 9 hours straight.",
+        },
+    )
+    assert resp.status_code == 302
+    resp = client.get("/me")
+    assert b"March 14" in resp.data
+    assert b"9 hours straight" in resp.data
+
+
+def test_member_nav_is_empty(auth_env, db_path):
+    client = create_app(db_path).test_client()
+    with client.session_transaction() as sess:
+        sess["user_email"] = "new@yale.edu"
+    client.post("/welcome", data={"display_name": "Newbie"})
+    html = client.get("/me").get_data(as_text=True)
+    assert 'class="nav"' not in html  # no top nav for members
+    assert "Log out" in html  # identity chip stays
 
 
 def test_dummy_login_disabled_by_default(auth_env, db_path):
@@ -128,6 +192,7 @@ def test_dummy_login_when_enabled(auth_env, db_path, monkeypatch):
     assert b"Dummy login" in client.get("/login").data
     resp = client.post("/auth/dummy")
     assert resp.status_code == 302
+    client.post("/welcome", data={"display_name": "Test Dummy"})
     resp = client.get("/me")
     assert resp.status_code == 200
     assert b"test@gmail.com" in resp.data

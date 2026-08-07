@@ -16,6 +16,21 @@ class Player:
 
 
 @dataclass(frozen=True)
+class PlayerProfile:
+    """Self-service member profile. Required fields come from onboarding;
+    the rest are optional extras the member may add later."""
+
+    player_id: int
+    display_name: str | None = None
+    class_year: str | None = None
+    residential_college: str | None = None
+    birthday: str | None = None
+    dining_hall: str | None = None
+    fun_facts: str | None = None
+    onboarded: bool = False
+
+
+@dataclass(frozen=True)
 class Group:
     id: int | None
     session_id: int | None

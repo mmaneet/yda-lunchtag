@@ -40,6 +40,19 @@ CREATE TABLE IF NOT EXISTS group_members (
     UNIQUE(group_id, player_id)
 );
 
+CREATE TABLE IF NOT EXISTS player_profiles (
+    player_id INTEGER PRIMARY KEY,
+    display_name TEXT,
+    class_year TEXT,
+    residential_college TEXT,
+    birthday TEXT,
+    dining_hall TEXT,
+    fun_facts TEXT,
+    onboarded INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT,
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
 CREATE INDEX IF NOT EXISTS idx_groups_session ON groups(session_id);
 CREATE INDEX IF NOT EXISTS idx_group_members_player ON group_members(player_id);
