@@ -113,6 +113,26 @@ def test_unlinked_member_gets_welcome_page(auth_env, db_path):
     assert b"isn't linked" in resp.data
 
 
+def test_dummy_login_disabled_by_default(auth_env, db_path):
+    client = create_app(db_path).test_client()
+    assert b"Dummy login" not in client.get("/login").data
+    resp = client.post("/auth/dummy")
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
+    assert client.get("/me").status_code == 302  # still signed out
+
+
+def test_dummy_login_when_enabled(auth_env, db_path, monkeypatch):
+    monkeypatch.setenv("DUMMY_LOGIN_EMAIL", "test@gmail.com")
+    client = create_app(db_path).test_client()
+    assert b"Dummy login" in client.get("/login").data
+    resp = client.post("/auth/dummy")
+    assert resp.status_code == 302
+    resp = client.get("/me")
+    assert resp.status_code == 200
+    assert b"test@gmail.com" in resp.data
+
+
 def test_store_roles_roundtrip(db_path):
     assert store.get_role("x@yale.edu", db_path=db_path) == "member"
     store.set_role("X@Yale.EDU", "admin", db_path=db_path)

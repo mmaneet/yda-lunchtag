@@ -57,6 +57,10 @@ def init_auth(app: Flask) -> None:
     # Authlib reads GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET from app.config.
     app.config["GOOGLE_CLIENT_ID"] = os.environ.get("GOOGLE_CLIENT_ID", "")
     app.config["GOOGLE_CLIENT_SECRET"] = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    # TESTING BACKDOOR, off unless the env var is set: shows a "dummy login"
+    # button that signs in as this email with no OAuth and no yale.edu check.
+    # Anyone who can reach the site can use it — unset the env var to kill it.
+    app.config["DUMMY_LOGIN_EMAIL"] = os.environ.get("DUMMY_LOGIN_EMAIL", "")
     app.register_blueprint(bp)
 
     if app.config["GOOGLE_CLIENT_ID"]:
@@ -141,6 +145,17 @@ def callback():
     session.clear()
     session["user_email"] = email
     session["user_name"] = claims.get("name") or ""
+    return redirect(url_for("index"))
+
+
+@bp.route("/auth/dummy", methods=["POST"])
+def dummy_login():
+    email = current_app.config.get("DUMMY_LOGIN_EMAIL")
+    if not email:
+        return redirect(url_for("auth.login"))
+    session.clear()
+    session["user_email"] = email.strip().lower()
+    session["user_name"] = "Dummy user"
     return redirect(url_for("index"))
 
 

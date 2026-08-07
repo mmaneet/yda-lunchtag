@@ -7,6 +7,11 @@
     <form action="{{ url_for('auth.google_login') }}" method="get">
       <button type="submit">Sign in with Google</button>
     </form>
+    {% if config.DUMMY_LOGIN_EMAIL %}
+    <form action="{{ url_for('auth.dummy_login') }}" method="post">
+      <button class="ghost" type="submit">Dummy login ({{ config.DUMMY_LOGIN_EMAIL }})</button>
+    </form>
+    {% endif %}
   </div>
 </section>
 {% endblock %}
