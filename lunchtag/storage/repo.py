@@ -5,7 +5,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
-from lunchtag.domain.models import Draft, Group, PairingStats, Player, PlayerProfile, Session
+from lunchtag.domain.models import (
+    Draft,
+    Group,
+    PairingStats,
+    Player,
+    PlayerProfile,
+    Preferences,
+    Session,
+)
 from lunchtag.storage.db import connect, init_db
 
 
@@ -178,6 +186,70 @@ class Repository:
             if row["display_name"]:
                 names[row["player_id"]] = row["display_name"]
         return names
+
+    # Preferences (strikes + boosts)
+    PREFERENCE_KINDS = ("strike", "boost")
+
+    def add_preference(self, player_id: int, target_id: int, kind: str) -> None:
+        if kind not in self.PREFERENCE_KINDS:
+            raise ValueError(f"Kind must be one of {self.PREFERENCE_KINDS}, got {kind!r}")
+        if player_id == target_id:
+            raise ValueError("Players cannot strike or boost themselves.")
+        if kind == "boost":
+            # One boost at a time: a new boost replaces the old one.
+            self.conn.execute(
+                "DELETE FROM player_preferences WHERE player_id = ? AND kind = 'boost'",
+                (player_id,),
+            )
+        self.conn.execute(
+            "INSERT INTO player_preferences (player_id, target_id, kind, created_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT (player_id, target_id, kind) DO NOTHING",
+            (player_id, target_id, kind, _now_iso()),
+        )
+        self.conn.commit()
+
+    def remove_preference(self, player_id: int, target_id: int, kind: str) -> None:
+        self.conn.execute(
+            "DELETE FROM player_preferences "
+            "WHERE player_id = ? AND target_id = ? AND kind = ?",
+            (player_id, target_id, kind),
+        )
+        self.conn.commit()
+
+    def list_preferences(self, player_id: int) -> dict[str, list[int]]:
+        rows = self.conn.execute(
+            "SELECT target_id, kind FROM player_preferences WHERE player_id = ? "
+            "ORDER BY created_at",
+            (player_id,),
+        ).fetchall()
+        prefs: dict[str, list[int]] = {kind: [] for kind in self.PREFERENCE_KINDS}
+        for row in rows:
+            prefs.setdefault(row["kind"], []).append(row["target_id"])
+        return prefs
+
+    def fetch_preferences(self) -> Preferences:
+        """All preferences as normalized unordered pairs for the engine.
+        Effect is symmetric: A striking B forbids the pair either way round."""
+        rows = self.conn.execute(
+            "SELECT player_id, target_id, kind FROM player_preferences"
+        ).fetchall()
+        forbidden = set()
+        boosted = set()
+        for row in rows:
+            pair = (
+                (row["player_id"], row["target_id"])
+                if row["player_id"] < row["target_id"]
+                else (row["target_id"], row["player_id"])
+            )
+            if row["kind"] == "strike":
+                forbidden.add(pair)
+            elif row["kind"] == "boost":
+                boosted.add(pair)
+        # A strike beats a boost on the same pair.
+        return Preferences(
+            forbidden=frozenset(forbidden),
+            boosted=frozenset(boosted - forbidden),
+        )
 
     # Sessions + groups
     def clear_drafts(self) -> None:

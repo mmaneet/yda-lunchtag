@@ -82,13 +82,95 @@ def create_app(db_path: Path | None = None) -> Flask:
             }
             for summary, member_ids in repo.player_history(player.id)
         ]
+        my_prefs = repo.list_preferences(player.id)
+        others = sorted(
+            (
+                (p.id, names.get(p.id, p.name))
+                for p in repo.list_active_players()
+                if p.id != player.id
+            ),
+            key=lambda item: item[1].lower(),
+        )
         return render_template(
             "me.html",
             player=player,
             profile=profile,
             history=history,
             colleges=RESIDENTIAL_COLLEGES,
+            others=others,
+            strikes=[(pid, names.get(pid, f"#{pid}")) for pid in my_prefs["strike"]],
+            boost=(
+                (my_prefs["boost"][0], names.get(my_prefs["boost"][0], f"#{my_prefs['boost'][0]}"))
+                if my_prefs["boost"]
+                else None
+            ),
         )
+
+    def _preference_target(repo: Repository, player):
+        """Validate the posted target id; returns it or None (with a flash)."""
+        raw = request.form.get("target_id", "")
+        try:
+            target_id = int(raw)
+        except ValueError:
+            flash("Pick a player first.")
+            return None
+        if target_id == player.id:
+            flash("You can't pick yourself.")
+            return None
+        try:
+            repo.get_player(target_id)
+        except ValueError:
+            flash("That player doesn't exist.")
+            return None
+        return target_id
+
+    @app.route("/me/strike", methods=["POST"])
+    def add_strike():
+        repo = get_repo()
+        player = _linked_player(repo)
+        if player is None:
+            return redirect(url_for("welcome"))
+        target_id = _preference_target(repo, player)
+        if target_id is not None:
+            repo.add_preference(player.id, target_id, "strike")
+            flash("Strike added.")
+        return redirect(url_for("my_pairings"))
+
+    @app.route("/me/strike/remove", methods=["POST"])
+    def remove_strike():
+        repo = get_repo()
+        player = _linked_player(repo)
+        if player is None:
+            return redirect(url_for("welcome"))
+        target_id = _preference_target(repo, player)
+        if target_id is not None:
+            repo.remove_preference(player.id, target_id, "strike")
+            flash("Strike removed.")
+        return redirect(url_for("my_pairings"))
+
+    @app.route("/me/boost", methods=["POST"])
+    def add_boost():
+        repo = get_repo()
+        player = _linked_player(repo)
+        if player is None:
+            return redirect(url_for("welcome"))
+        target_id = _preference_target(repo, player)
+        if target_id is not None:
+            repo.add_preference(player.id, target_id, "boost")
+            flash("Boost set.")
+        return redirect(url_for("my_pairings"))
+
+    @app.route("/me/boost/remove", methods=["POST"])
+    def remove_boost():
+        repo = get_repo()
+        player = _linked_player(repo)
+        if player is None:
+            return redirect(url_for("welcome"))
+        target_id = _preference_target(repo, player)
+        if target_id is not None:
+            repo.remove_preference(player.id, target_id, "boost")
+            flash("Boost removed.")
+        return redirect(url_for("my_pairings"))
 
     @app.route("/welcome", methods=["GET", "POST"])
     def welcome():
@@ -214,6 +296,7 @@ def create_app(db_path: Path | None = None) -> Flask:
             flash("Need at least 2 active players to generate pairings.")
             return redirect(url_for("generate"))
         stats = repo.fetch_pairing_stats()
+        prefs = repo.fetch_preferences()
         rng_seed = random.SystemRandom().randint(0, 2**31 - 1)
         draft = generate_best(
             [p.id for p in active_players],
@@ -221,6 +304,7 @@ def create_app(db_path: Path | None = None) -> Flask:
             DEFAULT_SCORING,
             DEFAULT_GENERATION,
             seed=rng_seed,
+            prefs=prefs,
         )
         repo.clear_drafts()
         session_id = repo.create_draft(draft.seed, draft.score, draft.groups)
@@ -237,7 +321,10 @@ def create_app(db_path: Path | None = None) -> Flask:
         active_players = repo.list_active_players()
         players_map = {p.id: p for p in repo.list_players(include_deleted=True)}
         stats = repo.fetch_pairing_stats()
-        breakdown = score_groups([g.member_ids for g in draft.groups], stats, DEFAULT_SCORING)
+        prefs = repo.fetch_preferences()
+        breakdown = score_groups(
+            [g.member_ids for g in draft.groups], stats, DEFAULT_SCORING, prefs=prefs
+        )
         repeats = repeat_edges(breakdown.pair_penalties, stats)
         repeat_pairs = [
             (
@@ -271,8 +358,9 @@ def create_app(db_path: Path | None = None) -> Flask:
             flash("Select two different players to swap.")
             return redirect(url_for("draft_view", session_id=session_id))
         stats = repo.fetch_pairing_stats()
+        prefs = repo.fetch_preferences()
         old_groups = [g.member_ids for g in draft.groups]
-        old_breakdown = score_groups(old_groups, stats, DEFAULT_SCORING)
+        old_breakdown = score_groups(old_groups, stats, DEFAULT_SCORING, prefs=prefs)
         old_repeats = len(repeat_edges(old_breakdown.pair_penalties, stats))
         groups = swap_players(old_groups, player_a, player_b)
         active_ids = [p.id for p in repo.list_active_players()]
@@ -280,7 +368,7 @@ def create_app(db_path: Path | None = None) -> Flask:
         if not valid:
             flash(f"Invalid edit: {msg}")
             return redirect(url_for("draft_view", session_id=session_id))
-        breakdown = score_groups(groups, stats, DEFAULT_SCORING)
+        breakdown = score_groups(groups, stats, DEFAULT_SCORING, prefs=prefs)
         new_repeats = len(repeat_edges(breakdown.pair_penalties, stats))
         repo.update_draft(session_id, breakdown.total, groups)
         delta = breakdown.total - old_breakdown.total
@@ -298,7 +386,10 @@ def create_app(db_path: Path | None = None) -> Flask:
             flash("Draft not found.")
             return redirect(url_for("generate"))
         stats = repo.fetch_pairing_stats()
-        breakdown = score_groups([g.member_ids for g in draft.groups], stats, DEFAULT_SCORING)
+        prefs = repo.fetch_preferences()
+        breakdown = score_groups(
+            [g.member_ids for g in draft.groups], stats, DEFAULT_SCORING, prefs=prefs
+        )
         repo.confirm_draft(session_id, breakdown.total)
         flash("Draft confirmed and saved to history.")
         return redirect(url_for("history"))

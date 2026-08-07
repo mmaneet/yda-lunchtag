@@ -335,3 +335,103 @@ def test_check_sign_in_reads_db(db_path):
     store.add_allowed_email("x@yale.edu", db_path=db_path)
     allowed, _ = check_sign_in("x@yale.edu", email_verified=True, db_path=db_path)
     assert allowed
+
+
+# --- strikes and boosts (member routes) -------------------------------------
+
+
+def _onboarded_member(app, email, name):
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_email"] = email
+    client.post("/welcome", data={"display_name": name})
+    return client
+
+
+def test_member_can_strike_and_remove(auth_env, db_path):
+    app = create_app(db_path)
+    alice = _onboarded_member(app, "alice@yale.edu", "Alice")
+    _onboarded_member(app, "bob@yale.edu", "Bob")
+    _onboarded_member(app, "cara@yale.edu", "Cara")
+    from lunchtag.storage.repo import Repository
+
+    repo = Repository(db_path)
+    ids = {p.name: p.id for p in repo.list_players()}
+    # Multiple strikes allowed.
+    alice.post("/me/strike", data={"target_id": ids["Bob"]})
+    alice.post("/me/strike", data={"target_id": ids["Cara"]})
+    prefs = repo.fetch_preferences()
+    assert len(prefs.forbidden) == 2
+    html = alice.get("/me").get_data(as_text=True)
+    assert "admins cannot see your strikes" in html
+    assert "Bob" in html and "Cara" in html
+    # Remove one.
+    alice.post("/me/strike/remove", data={"target_id": ids["Bob"]})
+    repo2 = Repository(db_path)
+    assert len(repo2.fetch_preferences().forbidden) == 1
+    repo.close()
+    repo2.close()
+
+
+def test_boost_replaces_previous_boost(auth_env, db_path):
+    app = create_app(db_path)
+    alice = _onboarded_member(app, "alice@yale.edu", "Alice")
+    _onboarded_member(app, "bob@yale.edu", "Bob")
+    _onboarded_member(app, "cara@yale.edu", "Cara")
+    from lunchtag.storage.repo import Repository
+
+    repo = Repository(db_path)
+    ids = {p.name: p.id for p in repo.list_players()}
+    alice.post("/me/boost", data={"target_id": ids["Bob"]})
+    alice.post("/me/boost", data={"target_id": ids["Cara"]})
+    repo2 = Repository(db_path)
+    prefs = repo2.fetch_preferences()
+    assert len(prefs.boosted) == 1  # one boost at a time
+    a_id = ids["Alice"]
+    c_id = ids["Cara"]
+    assert ((min(a_id, c_id), max(a_id, c_id))) in prefs.boosted
+    repo.close()
+    repo2.close()
+
+
+def test_self_strike_rejected(auth_env, db_path):
+    app = create_app(db_path)
+    alice = _onboarded_member(app, "alice@yale.edu", "Alice")
+    from lunchtag.storage.repo import Repository
+
+    repo = Repository(db_path)
+    my_id = repo.list_players()[0].id
+    alice.post("/me/strike", data={"target_id": my_id})
+    repo2 = Repository(db_path)
+    assert not repo2.fetch_preferences().forbidden
+    repo.close()
+    repo2.close()
+
+
+def test_admin_pages_never_mention_strikes(auth_env, db_path):
+    app = create_app(db_path)
+    alice = _onboarded_member(app, "alice@yale.edu", "Alice")
+    _onboarded_member(app, "bob@yale.edu", "Bob")
+    from lunchtag.storage.repo import Repository
+
+    repo = Repository(db_path)
+    ids = {p.name: p.id for p in repo.list_players()}
+    repo.close()
+    alice.post("/me/strike", data={"target_id": ids["Bob"]})
+    store.set_role("boss@yale.edu", "admin", db_path=db_path)
+    admin = app.test_client()
+    with admin.session_transaction() as sess:
+        sess["user_email"] = "boss@yale.edu"
+    for path in ("/players", "/generate", "/history"):
+        html = admin.get(path).get_data(as_text=True).lower()
+        assert "strike" not in html, path
+        assert "boost" not in html, path
+
+
+def test_edit_profile_collapsed_by_default(auth_env, db_path):
+    app = create_app(db_path)
+    alice = _onboarded_member(app, "alice@yale.edu", "Alice")
+    html = alice.get("/me").get_data(as_text=True)
+    assert "<details" in html
+    assert "Edit profile" in html
+    assert "<details open" not in html

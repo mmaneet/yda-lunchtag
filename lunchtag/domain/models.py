@@ -69,6 +69,21 @@ class PairingStats:
 
 
 @dataclass(frozen=True)
+class Preferences:
+    """Member pairing preferences, normalized to unordered (min, max) pairs.
+
+    forbidden: strikes — these pairs must never be grouped together.
+    boosted: boosts — these pairs get a scoring bonus (roughly double odds).
+    """
+
+    forbidden: frozenset[tuple[int, int]]
+    boosted: frozenset[tuple[int, int]]
+
+
+EMPTY_PREFERENCES = Preferences(forbidden=frozenset(), boosted=frozenset())
+
+
+@dataclass(frozen=True)
 class ScoreBreakdown:
     total: float
     pair_penalties: dict[tuple[int, int], float]

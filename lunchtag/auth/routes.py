@@ -32,7 +32,16 @@ bp = Blueprint("auth", __name__)
 _OAUTH_CLIENT_KEY = "lunchtag_google_oauth"
 
 # Endpoints a signed-in non-admin may reach. Everything else is admin-only.
-MEMBER_ENDPOINTS = {"index", "my_pairings", "welcome", "update_profile"}
+MEMBER_ENDPOINTS = {
+    "index",
+    "my_pairings",
+    "welcome",
+    "update_profile",
+    "add_strike",
+    "remove_strike",
+    "add_boost",
+    "remove_boost",
+}
 
 
 def auth_enabled() -> bool:

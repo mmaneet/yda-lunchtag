@@ -6,7 +6,7 @@ from itertools import combinations
 from math import exp
 from typing import Iterable
 
-from lunchtag.domain.models import PairingStats, ScoreBreakdown
+from lunchtag.domain.models import EMPTY_PREFERENCES, PairingStats, Preferences, ScoreBreakdown
 from lunchtag.engine.config import ScoringConfig
 
 
@@ -31,10 +31,13 @@ def pair_penalty(
     stats: PairingStats,
     config: ScoringConfig,
     now: datetime | None = None,
+    prefs: Preferences = EMPTY_PREFERENCES,
 ) -> float:
     if now is None:
         now = datetime.now(timezone.utc)
     key = _pair_key(a, b)
+    if key in prefs.forbidden:
+        return config.strike_penalty
     met = stats.met_count.get(key, 0)
     count_penalty = config.count_weight * (met ** config.count_exponent) if met > 0 else 0.0
 
@@ -53,7 +56,10 @@ def pair_penalty(
             degree_b = stats.degree.get(b, 0)
             fairness_penalty = config.fairness_weight * ((degree_a + degree_b) / (2 * max_degree))
 
-    return count_penalty + recency_penalty + fairness_penalty
+    penalty = count_penalty + recency_penalty + fairness_penalty
+    if key in prefs.boosted:
+        penalty = penalty * 0.5 - config.boost_bonus
+    return penalty
 
 
 def score_groups(
@@ -61,20 +67,30 @@ def score_groups(
     stats: PairingStats,
     config: ScoringConfig,
     now: datetime | None = None,
+    prefs: Preferences = EMPTY_PREFERENCES,
 ) -> ScoreBreakdown:
     if now is None:
         now = datetime.now(timezone.utc)
     pair_penalties: dict[tuple[int, int], float] = {}
     total = 0.0
+    singleton_count = 0
+    member_count = 0
     for group in groups:
         members = list(group)
+        member_count += len(members)
         for a, b in combinations(members, 2):
             key = _pair_key(a, b)
-            penalty = pair_penalty(a, b, stats, config, now=now)
+            penalty = pair_penalty(a, b, stats, config, now=now, prefs=prefs)
             pair_penalties[key] = penalty
             total += penalty
         if len(members) == 3:
             total += config.trio_penalty
+        if len(members) == 1:
+            singleton_count += 1
+    # Groups of one are heavily penalized — except a single-player roster,
+    # where a lone group is the only possibility.
+    if member_count > 1:
+        total += singleton_count * config.singleton_penalty
     return ScoreBreakdown(total=total, pair_penalties=pair_penalties)
 
 

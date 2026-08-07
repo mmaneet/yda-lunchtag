@@ -69,6 +69,7 @@ def main() -> None:
             print("Need at least 2 active players.")
             return
         stats = repo.fetch_pairing_stats()
+        prefs = repo.fetch_preferences()
         rng_seed = random.SystemRandom().randint(0, 2**31 - 1)
         draft = generate_best(
             [p.id for p in active],
@@ -76,6 +77,7 @@ def main() -> None:
             DEFAULT_SCORING,
             DEFAULT_GENERATION,
             seed=rng_seed,
+            prefs=prefs,
         )
         repo.clear_drafts()
         session_id = repo.create_draft(draft.seed, draft.score, draft.groups)

@@ -73,7 +73,9 @@ store.list_allowed_emails()
 store.set_whitelist_enforced(True)   # or False
 ```
 
-**Roles** (`user_roles` table; default `member`): admins see the full dashboard (players, generate, history, reset); members see only their own profile page at `/me` — profile details on the left, a pairing-history widget on the right, and no top nav. First-time members get an onboarding screen at `/welcome` (display name, class year, residential college) which creates and links their player row; optional extras (birthday, favorite dining hall, fun facts) live in the `player_profiles` table and are editable on the profile page. With auth disabled (local dev), everyone is effectively admin. Manage roles with the CLI:
+**Roles** (`user_roles` table; default `member`): admins see the full dashboard (players, generate, history, reset); members see only their own profile page at `/me` — profile details on the left, a pairing-history widget on the right, and no top nav. First-time members get an onboarding screen at `/welcome` (display name, class year, residential college) which creates and links their player row; optional extras (birthday, favorite dining hall, fun facts) live in the `player_profiles` table and are editable via the collapsed "Edit profile" section.
+
+**Strikes and boosts** (`player_preferences` table): members can strike players (never be paired with them — unlimited, private: no admin UI shows them) and boost one player (roughly doubles the odds of being paired — a new boost replaces the old). The engine treats strikes as hard constraints (`strike_penalty`) and boosts as a scoring bonus (`boost_bonus`, see `lunchtag/engine/config.py`). When strikes make perfect 2-person pairings impossible — even with an even roster — the generator falls back to groups of 3, so trios are now valid at any roster parity. With auth disabled (local dev), everyone is effectively admin. Manage roles with the CLI:
 
 ```bash
 python -m lunchtag.cli role set someone@yale.edu admin
