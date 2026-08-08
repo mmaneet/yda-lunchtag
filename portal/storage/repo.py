@@ -141,6 +141,7 @@ class Repository:
             second_major=row["second_major"],
             email_notifications=bool(row["email_notifications"]),
             slack_notifications=bool(row["slack_notifications"]),
+            lunchtag_opt_in=bool(row["lunchtag_opt_in"]),
             onboarded=bool(row["onboarded"]),
         )
 
@@ -160,8 +161,8 @@ class Repository:
         self.conn.execute(
             "INSERT INTO player_profiles (player_id, display_name, class_year, "
             "residential_college, birthday, dining_hall, fun_facts, major, second_major, "
-            "email_notifications, slack_notifications, onboarded, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "email_notifications, slack_notifications, lunchtag_opt_in, onboarded, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (player_id) DO UPDATE SET "
             "display_name = excluded.display_name, class_year = excluded.class_year, "
             "residential_college = excluded.residential_college, birthday = excluded.birthday, "
@@ -169,6 +170,7 @@ class Repository:
             "major = excluded.major, second_major = excluded.second_major, "
             "email_notifications = excluded.email_notifications, "
             "slack_notifications = excluded.slack_notifications, "
+            "lunchtag_opt_in = excluded.lunchtag_opt_in, "
             "onboarded = excluded.onboarded, updated_at = excluded.updated_at",
             (
                 player_id,
@@ -182,6 +184,7 @@ class Repository:
                 merged["second_major"],
                 1 if (current is None or current.email_notifications) else 0,
                 1 if (current is None or current.slack_notifications) else 0,
+                1 if (current is not None and current.lunchtag_opt_in) else 0,
                 1 if onboarded else 0,
                 now,
             ),
@@ -190,6 +193,34 @@ class Repository:
         profile = self.get_profile(player_id)
         assert profile is not None
         return profile
+
+    def set_lunchtag_opt_in(self, player_id: int, opted_in: bool) -> None:
+        """Flip a member's LunchTag participation, creating a minimal profile
+        row if needed."""
+        if self.get_profile(player_id) is None:
+            self.conn.execute(
+                "INSERT INTO player_profiles (player_id, lunchtag_opt_in, onboarded, updated_at) "
+                "VALUES (?, ?, 0, ?)",
+                (player_id, 1 if opted_in else 0, _now_iso()),
+            )
+        else:
+            self.conn.execute(
+                "UPDATE player_profiles SET lunchtag_opt_in = ?, updated_at = ? "
+                "WHERE player_id = ?",
+                (1 if opted_in else 0, _now_iso(), player_id),
+            )
+        self.conn.commit()
+
+    def list_pairing_pool(self) -> list[Player]:
+        """Active, non-deleted players who explicitly opted into LunchTag.
+        Opt-in is the member's own choice — no profile row means not in."""
+        rows = self.conn.execute(
+            "SELECT p.* FROM players p "
+            "JOIN player_profiles pr ON pr.player_id = p.id "
+            "WHERE p.active = 1 AND p.deleted = 0 AND pr.lunchtag_opt_in = 1 "
+            "ORDER BY lower(p.name)"
+        ).fetchall()
+        return [_player_from_row(row) for row in rows]
 
     def set_notification_prefs(self, player_id: int, *, email: bool, slack: bool) -> None:
         """Set a member's notification toggles, creating a minimal profile row

@@ -123,6 +123,8 @@ def test_confirm_flow_respects_toggle(auth_env, db_path, monkeypatch):
     repo = Repository(db_path)
     a = repo.add_player("Ava")
     b = repo.add_player("Ben")
+    repo.set_lunchtag_opt_in(a.id, True)
+    repo.set_lunchtag_opt_in(b.id, True)
     repo.close()
     client = app.test_client()
     with client.session_transaction() as sess:

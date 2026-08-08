@@ -69,7 +69,7 @@ def main() -> None:
         repo.add_player(args.name)
         print("Player added.")
     elif args.command == "generate":
-        active = repo.list_active_players()
+        active = repo.list_pairing_pool()
         if len(active) < 2:
             print("Need at least 2 active players.")
             return

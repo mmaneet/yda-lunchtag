@@ -65,21 +65,30 @@ def update():
     return redirect(url_for("profile.view"))
 
 
-@bp.route("/welcome", methods=["GET", "POST"])
-def welcome():
-    repo = get_repo()
-    email = session.get("user_email")
-    if not email:
+def _onboarding_guard(repo):
+    """Common checks for the onboarding pages; returns a redirect or None."""
+    if not session.get("user_email"):
         return redirect(url_for("index"))
     player = linked_player(repo)
     profile = repo.get_profile(player.id) if player else None
     if profile is not None and profile.onboarded:
         return redirect(url_for("profile.view"))
+    return None
+
+
+@bp.route("/welcome", methods=["GET", "POST"])
+def welcome():
+    repo = get_repo()
+    email = session.get("user_email")
+    guard = _onboarding_guard(repo)
+    if guard is not None:
+        return guard
     if request.method == "POST":
         display_name = request.form.get("display_name", "").strip()
         if not display_name:
             flash("Please tell us what to call you.")
-            return redirect(url_for("profile.welcome"))
+            return redirect(url_for("profile.welcome_setup"))
+        player = linked_player(repo)
         if player is None:
             player = repo.add_player(display_name)
             auth_store.link_player_email(
@@ -91,10 +100,34 @@ def welcome():
             class_year=request.form.get("class_year", "").strip() or None,
             residential_college=request.form.get("residential_college", "").strip() or None,
         )
-        flash("Welcome to LunchTag!")
+        opted_in = request.form.get("lunchtag_opt_in") == "1"
+        repo.set_lunchtag_opt_in(player.id, opted_in)
+        flash("Welcome to LunchTag!" if opted_in else "Welcome! You can join LunchTag from your profile anytime.")
         return redirect(url_for("profile.view"))
+    return render_template("welcome.html")
+
+
+@bp.route("/welcome/setup")
+def welcome_setup():
+    repo = get_repo()
+    guard = _onboarding_guard(repo)
+    if guard is not None:
+        return guard
+    player = linked_player(repo)
     return render_template(
-        "welcome.html",
+        "welcome_setup.html",
         suggested_name=player.name if player else (session.get("user_name") or ""),
         colleges=RESIDENTIAL_COLLEGES,
     )
+
+
+@bp.route("/profile/lunchtag", methods=["POST"])
+def update_lunchtag():
+    repo = get_repo()
+    player = linked_player(repo)
+    if player is None:
+        return redirect(url_for("profile.welcome"))
+    opted_in = request.form.get("lunchtag_opt_in") == "1"
+    repo.set_lunchtag_opt_in(player.id, opted_in)
+    flash("You're in — welcome to LunchTag!" if opted_in else "You've opted out of LunchTag.")
+    return redirect(url_for("profile.view"))

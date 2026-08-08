@@ -25,6 +25,25 @@
     </dl>
   </section>
 
+  <section class="panel optin-box">
+    <div>
+      <h3>LunchTag</h3>
+      {% if profile.lunchtag_opt_in %}
+      <p class="muted">You're opted in — you'll be paired for lunch each week.</p>
+      {% else %}
+      <p class="muted">You're not in LunchTag yet. Flip the switch to join the weekly pairings — we'd love to have you!</p>
+      {% endif %}
+    </div>
+    <form action="{{ url_for('profile.update_lunchtag') }}" method="post">
+      <label class="switch switch-lg" aria-label="LunchTag opt-in">
+        <input type="checkbox" name="lunchtag_opt_in" value="1"
+               {% if profile.lunchtag_opt_in %}checked{% endif %}
+               onchange="this.form.submit()">
+        <span class="slider"></span>
+      </label>
+    </form>
+  </section>
+
   <details class="panel edit-profile">
     <summary>Edit profile</summary>
     <p class="muted">Everything here is optional — share as much or as little as you like.</p>

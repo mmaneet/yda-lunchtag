@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel onboarding">
+  <h2>Tell us about yourself</h2>
+  <p class="muted">Just the basics — you can add more to your profile later.</p>
+  <form action="{{ url_for('profile.welcome') }}" method="post" class="stacked-form">
+    <label>
+      Preferred display name
+      <input type="text" name="display_name" value="{{ suggested_name }}" required>
+    </label>
+    <label>
+      Class year
+      <input type="text" name="class_year" inputmode="numeric" placeholder="e.g. 2029">
+    </label>
+    <label>
+      Residential college
+      <select name="residential_college">
+        <option value="">Choose one…</option>
+        {% for college in colleges %}
+        <option value="{{ college }}">{{ college }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <div class="optin-box">
+      <div>
+        <h3>Join LunchTag</h3>
+        <p class="muted">
+          Get paired with another YDA member for lunch every week.
+          Flip the switch to opt in — we'd love to have you!
+        </p>
+      </div>
+      <label class="switch switch-lg" aria-label="Opt into LunchTag">
+        <input type="checkbox" name="lunchtag_opt_in" value="1">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <button type="submit">Let's go</button>
+  </form>
+</section>
+{% endblock %}

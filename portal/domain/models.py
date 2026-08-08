@@ -31,6 +31,7 @@ class PlayerProfile:
     second_major: str | None = None
     email_notifications: bool = True
     slack_notifications: bool = True
+    lunchtag_opt_in: bool = False
     onboarded: bool = False
 
 

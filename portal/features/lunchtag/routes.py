@@ -37,6 +37,8 @@ def me():
     profile = repo.get_profile(player.id) if player else None
     if player is None or profile is None or not profile.onboarded:
         return redirect(url_for("profile.welcome"))
+    if not profile.lunchtag_opt_in:
+        return render_template("lunchtag/opted_out.html")
     names = repo.display_names()
     raw_history = repo.player_history(player.id)
     history = [
@@ -223,7 +225,7 @@ def admin_delete_player(player_id: int):
 @bp.route("/admin/generate")
 def admin_generate():
     repo = get_repo()
-    active_players = repo.list_active_players()
+    active_players = repo.list_pairing_pool()
     draft = repo.get_draft()
     return render_template(
         "lunchtag/generate.html",
@@ -235,7 +237,7 @@ def admin_generate():
 @bp.route("/admin/draft/generate", methods=["POST"])
 def admin_generate_draft():
     repo = get_repo()
-    active_players = repo.list_active_players()
+    active_players = repo.list_pairing_pool()
     if len(active_players) < 2:
         flash("Need at least 2 active players to generate pairings.")
         return redirect(url_for("lunchtag.admin_generate"))
@@ -276,7 +278,7 @@ def admin_draft_view(session_id: int):
     if draft is None or draft.session_id != session_id:
         flash("Draft not found.")
         return redirect(url_for("lunchtag.admin_generate"))
-    active_players = repo.list_active_players()
+    active_players = repo.list_pairing_pool()
     players_map = {p.id: p for p in repo.list_players(include_deleted=True)}
     stats = repo.fetch_pairing_stats()
     prefs = repo.fetch_preferences()
@@ -312,7 +314,7 @@ def admin_draft_swap(session_id: int):
     old_breakdown = score_groups(old_groups, stats, DEFAULT_SCORING, prefs=prefs)
     old_repeats = len(repeat_edges(old_breakdown.pair_penalties, stats))
     groups = swap_players(old_groups, player_a, player_b)
-    active_ids = [p.id for p in repo.list_active_players()]
+    active_ids = [p.id for p in repo.list_pairing_pool()]
     valid, msg = validate_groups(groups, active_ids)
     if not valid:
         flash(f"Invalid edit: {msg}")

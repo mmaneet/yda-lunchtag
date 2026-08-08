@@ -173,6 +173,12 @@ def dummy_login():
     if email not in emails:
         flash("Unknown dummy user.")
         return redirect(url_for("auth.login"))
+    if email.split("@")[0].startswith("onboard"):
+        # Onboarding tester accounts reset on every login, so the fresh
+        # first-sign-in flow can be replayed endlessly.
+        from portal.shared import reset_member
+
+        reset_member(email, db_path=current_app.config.get("DB_PATH"))
     session.clear()
     session["user_email"] = email
     session["user_name"] = "Dummy user"

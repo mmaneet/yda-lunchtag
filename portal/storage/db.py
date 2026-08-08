@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS player_profiles (
     second_major TEXT,
     email_notifications INTEGER NOT NULL DEFAULT 1,
     slack_notifications INTEGER NOT NULL DEFAULT 1,
+    lunchtag_opt_in INTEGER NOT NULL DEFAULT 0,
     onboarded INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT,
     FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
@@ -121,6 +122,7 @@ _PROFILE_COLUMN_ADDS = [
     "second_major TEXT",
     "email_notifications INTEGER NOT NULL DEFAULT 1",
     "slack_notifications INTEGER NOT NULL DEFAULT 1",
+    "lunchtag_opt_in INTEGER NOT NULL DEFAULT 0",
 ]
 
 

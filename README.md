@@ -74,7 +74,9 @@ Sign-in is Google OAuth (OpenID Connect via Authlib), restricted to yale.edu acc
 
 **Sign-in policy** (data, not code — `portal/auth/`): the email must be a *verified* `@yale.edu` address (from ID-token claims; `hd` is only a hint). Optional whitelist: `allowed_emails` table + enforcement toggle in `app_settings` (key `auth_whitelist_enforced`, default off), managed via `portal.auth.store` functions.
 
-**Roles** (`user_roles` table; default `member`): members see the Profile and LunchTag tabs only; admins additionally get the admin sub-nav on LunchTag pages (Players, Generate, History, Reset). First-time members onboard at `/welcome` (creates + links their player row); profile extras live in `player_profiles`.
+**Roles** (`user_roles` table; default `member`): members see the Profile and LunchTag tabs only; admins additionally get the admin sub-nav on LunchTag pages (Players, Generate, History, Reset). First-time members onboard at `/welcome` (welcome splash, then a setup form that creates + links their player row); profile extras live in `player_profiles`.
+
+**LunchTag opt-in**: participation is a member choice (`lunchtag_opt_in` on `player_profiles`). New users are opted **out** by default — onboarding and the Profile page have a prominent toggle to join. Opted-out members see a friendly "opt in from your profile" page instead of the LunchTag dashboard, and pairing generation draws only from `list_pairing_pool()` (active + explicitly opted in). Onboarding-tester dummy accounts (emails starting `onboard`) reset themselves on every dummy login so the first-run flow can be replayed endlessly.
 
 **Strikes and boosts** (`player_preferences` table): members can strike players (never paired — unlimited, private: no admin UI shows them) and boost one player (~doubles pairing odds; new boost replaces old). Strikes are hard engine constraints; when they make perfect pairs impossible — even with an even roster — the generator falls back to groups of 3.
 

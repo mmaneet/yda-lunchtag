@@ -13,10 +13,17 @@ def test_first_login_gets_onboarding(auth_env, db_path):
     resp = client.get("/profile")
     assert resp.status_code == 302
     assert resp.headers["Location"].endswith("/welcome")
+    # Step 1: the welcome splash.
     resp = client.get("/welcome")
     assert resp.status_code == 200
-    assert b"Welcome to LunchTag!" in resp.data
-    assert b"New Member" in resp.data  # Google name prefilled
+    assert b"Welcome to YDA Member Resources!" in resp.data
+    assert b"Get started" in resp.data
+    # Step 2: the setup form, with the Google name prefilled and the opt-in.
+    resp = client.get("/welcome/setup")
+    assert resp.status_code == 200
+    assert b"New Member" in resp.data
+    assert b"Join LunchTag" in resp.data
+    assert b"lunchtag_opt_in" in resp.data
 
 
 def test_onboarding_creates_player_and_profile(auth_env, db_path):
@@ -87,3 +94,44 @@ def test_profile_page_has_no_lunchtag_content(auth_env, db_path):
     assert "Strike" not in html.replace("LunchTag", "")
     assert "Boost" not in html
     assert "Your pairings" not in html
+
+
+# --- LunchTag opt-in ---------------------------------------------------------
+
+
+def test_opted_out_member_sees_oops_page(auth_env, db_path):
+    app = create_app(db_path)
+    client = onboarded_member(app, "shy@yale.edu", "Shy Person", opt_in=False)
+    resp = client.get("/lunchtag")
+    assert resp.status_code == 200
+    assert b"Oops! You aren't opted into LunchTag!" in resp.data
+    assert b"we'd love to have you" in resp.data.lower()
+    assert b"Strike" not in resp.data  # no dashboard widgets
+
+
+def test_profile_toggle_opts_in_and_out(auth_env, db_path):
+    app = create_app(db_path)
+    client = onboarded_member(app, "shy@yale.edu", "Shy Person", opt_in=False)
+    html = client.get("/profile").get_data(as_text=True)
+    assert "not in LunchTag yet" in html
+    client.post("/profile/lunchtag", data={"lunchtag_opt_in": "1"})
+    html = client.get("/profile").get_data(as_text=True)
+    assert "opted in" in html
+    assert client.get("/lunchtag").status_code == 200
+    assert b"This week's pairing" in client.get("/lunchtag").data
+    # And back out again.
+    client.post("/profile/lunchtag", data={})
+    assert b"Oops!" in client.get("/lunchtag").data
+
+
+def test_opted_out_members_excluded_from_pairing_pool(auth_env, db_path):
+    app = create_app(db_path)
+    onboarded_member(app, "a@yale.edu", "Ay")
+    onboarded_member(app, "b@yale.edu", "Bee")
+    onboarded_member(app, "c@yale.edu", "Cee", opt_in=False)
+    from portal.storage.repo import Repository
+
+    repo = Repository(db_path)
+    pool_names = {p.name for p in repo.list_pairing_pool()}
+    repo.close()
+    assert pool_names == {"Ay", "Bee"}

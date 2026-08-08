@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel onboarding splash">
+  <h2>Oops! You aren't opted into LunchTag!</h2>
+  <p class="muted">
+    Please go back to your profile and opt in — we'd love to have you!
+  </p>
+  <a class="button" href="{{ url_for('profile.view') }}">Take me to my profile</a>
+</section>
+{% endblock %}

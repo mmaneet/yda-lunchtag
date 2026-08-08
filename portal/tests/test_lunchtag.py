@@ -14,6 +14,7 @@ def test_member_lunchtag_page_shows_history_widget(auth_env, db_path):
     sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
     repo.confirm_draft(sid, 0.0)
     repo.upsert_profile(a.id, display_name="Ava")
+    repo.set_lunchtag_opt_in(a.id, True)
     repo.close()
     store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
     client = app.test_client()
@@ -34,6 +35,7 @@ def test_hero_card_shows_partner_profile(auth_env, db_path):
     sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
     repo.confirm_draft(sid, 0.0)
     repo.upsert_profile(a.id, display_name="Ava")
+    repo.set_lunchtag_opt_in(a.id, True)
     repo.upsert_profile(
         b.id, display_name="Ben", class_year="2028", residential_college="Morse",
         dining_hall="Commons", fun_facts="Collects rare stamps.",
@@ -59,6 +61,7 @@ def test_history_widget_stacks_cards_and_paginates(auth_env, db_path):
         sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
         repo.confirm_draft(sid, 0.0)
     repo.upsert_profile(a.id, display_name="Ava")
+    repo.set_lunchtag_opt_in(a.id, True)
     repo.close()
     store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
     client = app.test_client()

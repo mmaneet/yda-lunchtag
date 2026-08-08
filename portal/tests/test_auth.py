@@ -286,3 +286,17 @@ def test_store_player_email_link_roundtrip(db_path):
     assert store.emails_by_player(db_path=db_path) == {9: "a@yale.edu"}
     store.unlink_player(9, db_path=db_path)
     assert store.get_player_id_for_email("a@yale.edu", db_path=db_path) is None
+
+
+def test_onboard_tester_resets_on_every_login(auth_env, db_path, monkeypatch):
+    monkeypatch.setenv("DUMMY_LOGIN_EMAIL", "onboard1@example.com")
+    client = create_app(db_path).test_client()
+    client.post("/auth/dummy")
+    client.post("/welcome", data={"display_name": "Fresh Tester", "lunchtag_opt_in": "1"})
+    assert store.get_player_id_for_email("onboard1@example.com", db_path=db_path) is not None
+    assert client.get("/profile").status_code == 200  # onboarded
+    # Logging in again wipes the player: onboarding starts fresh.
+    client.post("/auth/dummy")
+    assert store.get_player_id_for_email("onboard1@example.com", db_path=db_path) is None
+    resp = client.get("/profile")
+    assert resp.headers["Location"].endswith("/welcome")

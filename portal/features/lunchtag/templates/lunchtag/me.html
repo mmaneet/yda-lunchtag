@@ -131,14 +131,16 @@
     <section class="panel">
       <h2>Notifications</h2>
       <form action="{{ url_for('lunchtag.update_notifications') }}" method="post" class="stacked-form">
-        <label class="check-row">
+        <label class="switch">
           <input type="checkbox" name="email" value="1"
                  {% if profile is none or profile.email_notifications %}checked{% endif %}>
+          <span class="slider"></span>
           Email notifications
         </label>
-        <label class="check-row">
+        <label class="switch">
           <input type="checkbox" name="slack" value="1"
                  {% if profile is none or profile.slack_notifications %}checked{% endif %}>
+          <span class="slider"></span>
           Slack notifications
         </label>
         <button type="submit">Save</button>
