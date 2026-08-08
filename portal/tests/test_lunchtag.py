@@ -106,6 +106,29 @@ def test_lunchtag_page_has_no_profile_edit_form(auth_env, db_path):
     assert "No pairings yet" in html  # empty history state
 
 
+def test_notification_toggles_default_on_and_save(auth_env, db_path):
+    app = create_app(db_path)
+    client = onboarded_member(app, "alice@yale.edu", "Alice")
+    html = client.get("/lunchtag").get_data(as_text=True)
+    assert "Notifications" in html
+    assert html.count("checked") == 2  # both toggles on by default
+    # Turn email off, keep slack on.
+    client.post("/lunchtag/notifications", data={"slack": "1"})
+    repo = Repository(db_path)
+    pid = store.get_player_id_for_email("alice@yale.edu", db_path=db_path)
+    profile = repo.get_profile(pid)
+    repo.close()
+    assert profile.email_notifications is False
+    assert profile.slack_notifications is True
+    # Saving the profile form later must not clobber the toggles.
+    client.post("/profile/update", data={"display_name": "Alice", "major": "History"})
+    repo = Repository(db_path)
+    profile = repo.get_profile(pid)
+    repo.close()
+    assert profile.email_notifications is False
+    assert profile.major == "History"
+
+
 def test_member_can_strike_and_remove(auth_env, db_path):
     app = create_app(db_path)
     alice = onboarded_member(app, "alice@yale.edu", "Alice")

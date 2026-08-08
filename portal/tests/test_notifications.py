@@ -27,11 +27,15 @@ def test_toggle_defaults_off(db_path):
 def test_pairing_notifications_content_and_counts(db_path, monkeypatch):
     _clean_env(monkeypatch)
     repo = Repository(db_path)
-    a = repo.add_player("Ava")
-    b = repo.add_player("Ben")
+    a = repo.add_player("Ava Lin")
+    b = repo.add_player("Ben Ortiz")
     c = repo.add_player("Cara")  # no linked email -> skipped
-    repo.upsert_profile(b.id, display_name="Ben", class_year="2028",
-                        dining_hall="Commons", fun_facts="Collects stamps.")
+    repo.upsert_profile(a.id, display_name="Ava Lin")
+    repo.upsert_profile(
+        b.id, display_name="Ben Ortiz", class_year="2028", residential_college="Morse",
+        major="History", second_major="Economics",
+        dining_hall="Commons", fun_facts="Collects stamps",
+    )
     store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
     store.link_player_email("ben@yale.edu", b.id, db_path=db_path)
     sid = repo.create_draft(1, 0.0, [[a.id, b.id], [c.id]])
@@ -47,13 +51,56 @@ def test_pairing_notifications_content_and_counts(db_path, monkeypatch):
     summary = notifications.send_pairing_notifications(repo, sid, db_path=db_path)
     assert summary["emails_sent"] == 2
     assert summary["members_without_email"] == 1
+    assert summary["opted_out"] == 0
     assert summary["slack"] == "sent"
     ava_body = next(body for to, _, body in sent_emails if to == "ava@yale.edu")
-    assert "Ben" in ava_body
-    assert "Class of 2028" in ava_body
-    assert "Collects stamps." in ava_body
+    # The board's template, with every conditional sentence present.
+    assert ava_body.startswith("Hey Ava!")
+    assert "Your Lunchtag pairing for this week is: Ben Ortiz." in ava_body
+    assert "They're in the class of 2028, in Morse College." in ava_body
+    assert "They're studying History and Economics." in ava_body
+    assert "Some fun facts about them include: Collects stamps." in ava_body
+    assert "Their favorite dining hall is: Commons." in ava_body
+    assert "Check the lunchtag page on the website to opt-out!" in ava_body
+    assert "YDA Social Chair" in ava_body
+    # Ben's email about Ava: she has no facts, so no info sentences at all.
+    ben_body = next(body for to, _, body in sent_emails if to == "ben@yale.edu")
+    assert "Your Lunchtag pairing for this week is: Ava Lin." in ben_body
+    assert "Some quick info" not in ben_body
     assert "pairings are out" in slack_posts[0]
-    assert "Ava & Ben" in slack_posts[0]  # pair list included
+    assert "disabled on the website" in slack_posts[0]  # opt-out tag
+    repo.close()
+
+
+def test_undeclared_major_is_not_mentioned(db_path):
+    repo = Repository(db_path)
+    a = repo.add_player("Ava")
+    profile = repo.upsert_profile(a.id, display_name="Ava", major="Undeclared")
+    assert "studying" not in notifications._partner_info_sentences(profile).lower()
+    profile = repo.upsert_profile(a.id, major="Physics", second_major="undeclared")
+    assert "They're studying Physics." in notifications._partner_info_sentences(profile)
+    repo.close()
+
+
+def test_opted_out_member_gets_no_email(db_path, monkeypatch):
+    _clean_env(monkeypatch)
+    repo = Repository(db_path)
+    a = repo.add_player("Ava")
+    b = repo.add_player("Ben")
+    repo.upsert_profile(a.id, display_name="Ava")
+    repo.upsert_profile(b.id, display_name="Ben")
+    repo.set_notification_prefs(b.id, email=False, slack=True)
+    store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
+    store.link_player_email("ben@yale.edu", b.id, db_path=db_path)
+    sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
+    repo.confirm_draft(sid, 0.0)
+    sent = []
+    monkeypatch.setattr(notifications, "send_email",
+                        lambda to, subject, body: (sent.append(to), "sent")[1])
+    monkeypatch.setattr(notifications, "post_slack", lambda text: "sent")
+    summary = notifications.send_pairing_notifications(repo, sid, db_path=db_path)
+    assert sent == ["ava@yale.edu"]
+    assert summary["opted_out"] == 1
     repo.close()
 
 

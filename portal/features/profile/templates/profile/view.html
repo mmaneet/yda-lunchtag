@@ -18,6 +18,7 @@
       {{ profile.residential_college or '' }}
     </p>
     <dl class="profile-facts">
+      {% if profile.major %}<dt>Studying</dt><dd>{{ profile.major }}{% if profile.second_major %} and {{ profile.second_major }}{% endif %}</dd>{% endif %}
       {% if profile.birthday %}<dt>Birthday</dt><dd>{{ profile.birthday }}</dd>{% endif %}
       {% if profile.dining_hall %}<dt>Favorite dining hall</dt><dd>{{ profile.dining_hall }}</dd>{% endif %}
       {% if profile.fun_facts %}<dt>Fun facts</dt><dd>{{ profile.fun_facts }}</dd>{% endif %}
@@ -41,6 +42,14 @@
         <input type="text" name="residential_college" value="{{ profile.residential_college or '' }}" list="colleges">
       </label>
       <label>
+        Major
+        <input type="text" name="major" value="{{ profile.major or '' }}" list="majors" placeholder="e.g. Political Science, or Undeclared">
+      </label>
+      <label>
+        Second major (if any)
+        <input type="text" name="second_major" value="{{ profile.second_major or '' }}" list="majors">
+      </label>
+      <label>
         Birthday
         <input type="text" name="birthday" placeholder="e.g. March 14" value="{{ profile.birthday or '' }}">
       </label>
@@ -58,6 +67,9 @@
       {% for college in colleges %}
       <option value="{{ college }}"></option>
       {% endfor %}
+    </datalist>
+    <datalist id="majors">
+      <option value="Undeclared"></option>
     </datalist>
   </details>
 

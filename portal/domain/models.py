@@ -27,6 +27,10 @@ class PlayerProfile:
     birthday: str | None = None
     dining_hall: str | None = None
     fun_facts: str | None = None
+    major: str | None = None
+    second_major: str | None = None
+    email_notifications: bool = True
+    slack_notifications: bool = True
     onboarded: bool = False
 
 

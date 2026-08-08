@@ -82,10 +82,12 @@ Sign-in is Google OAuth (OpenID Connect via Authlib), restricted to yale.edu acc
 
 When an admin confirms a draft, every member with a linked email gets a pairing email (partner names + their profile info), and a summary posts to Slack. A Railway cron service (`railway.cron.json`: Sundays 23:00 UTC) runs `python -m portal.cli remind-admins`, emailing every admin a reminder to push new pairings.
 
+Members control their own delivery: the LunchTag page has Email/Slack notification toggles (both on by default, stored on `player_profiles`); opted-out members are skipped and counted in the admin's confirmation summary. The email follows the board's template (partner name, class year, college, major(s) unless Undeclared, fun facts, dining hall — missing facts drop their sentence) and is signed by the Social Chair.
+
 Two independent safety layers, both off by default:
 
 1. **Master switch** (config-as-data): `python -m portal.cli notifications on|off|status`.
-2. **Credentials**: with no `SMTP_*` / `SLACK_WEBHOOK_URL` env vars, everything is a dry-run — counted and logged, nothing sent. Works with any SMTP provider (Gmail app password on a role account, Resend, SendGrid…); the Slack side needs an Incoming Webhook URL from api.slack.com. `PORTAL_BASE_URL` controls the links in messages.
+2. **Credentials**: with no email/Slack env vars, everything is a dry-run — counted and logged, nothing sent. Email transports, in preference order: **Gmail API** (sends from a personal account; one-time `gmail.send` consent via `python scripts/get_gmail_token.py` — see that file for the full recipe) or any **SMTP** provider. Slack needs an Incoming Webhook URL from api.slack.com. `PORTAL_BASE_URL` controls links in messages.
 
 The cron service must have "Config file path" set to `railway.cron.json` in its Railway settings (otherwise it would inherit the web start command from `railway.json`), plus the same `DATABASE_URL` reference and `SMTP_*` vars as the web service.
 

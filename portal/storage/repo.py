@@ -119,6 +119,8 @@ class Repository:
         "birthday",
         "dining_hall",
         "fun_facts",
+        "major",
+        "second_major",
     )
 
     def get_profile(self, player_id: int) -> PlayerProfile | None:
@@ -135,12 +137,17 @@ class Repository:
             birthday=row["birthday"],
             dining_hall=row["dining_hall"],
             fun_facts=row["fun_facts"],
+            major=row["major"],
+            second_major=row["second_major"],
+            email_notifications=bool(row["email_notifications"]),
+            slack_notifications=bool(row["slack_notifications"]),
             onboarded=bool(row["onboarded"]),
         )
 
     def upsert_profile(self, player_id: int, *, onboarded: bool = True, **fields) -> PlayerProfile:
         """Create or update a profile. Only keys in _PROFILE_FIELDS are
-        accepted; missing keys keep their current value."""
+        accepted; missing keys (and the notification toggles) keep their
+        current value."""
         unknown = set(fields) - set(self._PROFILE_FIELDS)
         if unknown:
             raise ValueError(f"Unknown profile fields: {sorted(unknown)}")
@@ -152,12 +159,16 @@ class Repository:
         now = _now_iso()
         self.conn.execute(
             "INSERT INTO player_profiles (player_id, display_name, class_year, "
-            "residential_college, birthday, dining_hall, fun_facts, onboarded, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "residential_college, birthday, dining_hall, fun_facts, major, second_major, "
+            "email_notifications, slack_notifications, onboarded, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (player_id) DO UPDATE SET "
             "display_name = excluded.display_name, class_year = excluded.class_year, "
             "residential_college = excluded.residential_college, birthday = excluded.birthday, "
             "dining_hall = excluded.dining_hall, fun_facts = excluded.fun_facts, "
+            "major = excluded.major, second_major = excluded.second_major, "
+            "email_notifications = excluded.email_notifications, "
+            "slack_notifications = excluded.slack_notifications, "
             "onboarded = excluded.onboarded, updated_at = excluded.updated_at",
             (
                 player_id,
@@ -167,6 +178,10 @@ class Repository:
                 merged["birthday"],
                 merged["dining_hall"],
                 merged["fun_facts"],
+                merged["major"],
+                merged["second_major"],
+                1 if (current is None or current.email_notifications) else 0,
+                1 if (current is None or current.slack_notifications) else 0,
                 1 if onboarded else 0,
                 now,
             ),
@@ -175,6 +190,23 @@ class Repository:
         profile = self.get_profile(player_id)
         assert profile is not None
         return profile
+
+    def set_notification_prefs(self, player_id: int, *, email: bool, slack: bool) -> None:
+        """Set a member's notification toggles, creating a minimal profile row
+        if they somehow don't have one yet."""
+        if self.get_profile(player_id) is None:
+            self.conn.execute(
+                "INSERT INTO player_profiles (player_id, email_notifications, "
+                "slack_notifications, onboarded, updated_at) VALUES (?, ?, ?, 0, ?)",
+                (player_id, 1 if email else 0, 1 if slack else 0, _now_iso()),
+            )
+        else:
+            self.conn.execute(
+                "UPDATE player_profiles SET email_notifications = ?, "
+                "slack_notifications = ?, updated_at = ? WHERE player_id = ?",
+                (1 if email else 0, 1 if slack else 0, _now_iso(), player_id),
+            )
+        self.conn.commit()
 
     def display_names(self) -> dict[int, str]:
         """player_id -> best display name (profile display_name, else roster name)."""

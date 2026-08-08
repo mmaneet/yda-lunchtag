@@ -24,6 +24,7 @@
         {{ partner.profile.residential_college or '' }}
       </p>
       <dl class="profile-facts">
+        {% if partner.profile.major %}<dt>Studying</dt><dd>{{ partner.profile.major }}{% if partner.profile.second_major %} and {{ partner.profile.second_major }}{% endif %}</dd>{% endif %}
         {% if partner.profile.birthday %}<dt>Birthday</dt><dd>{{ partner.profile.birthday }}</dd>{% endif %}
         {% if partner.profile.dining_hall %}<dt>Favorite dining hall</dt><dd>{{ partner.profile.dining_hall }}</dd>{% endif %}
         {% if partner.profile.fun_facts %}<dt>Fun facts</dt><dd>{{ partner.profile.fun_facts }}</dd>{% endif %}
@@ -125,6 +126,24 @@
       {% else %}
       <p class="muted">Nothing here yet — past weeks will pile up as rounds go out.</p>
       {% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>Notifications</h2>
+      <form action="{{ url_for('lunchtag.update_notifications') }}" method="post" class="stacked-form">
+        <label class="check-row">
+          <input type="checkbox" name="email" value="1"
+                 {% if profile is none or profile.email_notifications %}checked{% endif %}>
+          Email notifications
+        </label>
+        <label class="check-row">
+          <input type="checkbox" name="slack" value="1"
+                 {% if profile is none or profile.slack_notifications %}checked{% endif %}>
+          Slack notifications
+        </label>
+        <button type="submit">Save</button>
+      </form>
+      <p class="muted pref-note">Pairing announcements arrive by email and Slack. Opt out anytime.</p>
     </section>
   </aside>
 </div>

@@ -23,6 +23,8 @@ PROFILE_FIELDS = (
     "birthday",
     "dining_hall",
     "fun_facts",
+    "major",
+    "second_major",
 )
 
 

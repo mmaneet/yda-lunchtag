@@ -71,6 +71,7 @@ def me():
     return render_template(
         "lunchtag/me.html",
         player=player,
+        profile=profile,
         current=history[0] if history else None,
         current_partners=current_partners,
         past=history[1:],
@@ -138,6 +139,21 @@ def add_boost():
 @bp.route("/boost/remove", methods=["POST"])
 def remove_boost():
     return _preference_action("boost", add=False)
+
+
+@bp.route("/notifications", methods=["POST"])
+def update_notifications():
+    repo = get_repo()
+    player = linked_player(repo)
+    if player is None:
+        return redirect(url_for("profile.welcome"))
+    repo.set_notification_prefs(
+        player.id,
+        email=request.form.get("email") == "1",
+        slack=request.form.get("slack") == "1",
+    )
+    flash("Notification settings saved.")
+    return redirect(url_for("lunchtag.me"))
 
 
 # --- admin routes (admin_* names are enforced by the auth gate) --------------
