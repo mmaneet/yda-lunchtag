@@ -17,6 +17,27 @@ from email.message import EmailMessage
 log = logging.getLogger(__name__)
 
 NOTIFICATIONS_ENABLED_KEY = "notifications_enabled"
+EMAIL_SUBJECT_KEY = "pairing_email_subject"
+EMAIL_TEMPLATE_KEY = "pairing_email_template"
+
+DEFAULT_EMAIL_SUBJECT = "Your LunchTag pairing this week"
+
+# The board's template, as sandboxed Jinja. Admins can edit the stored copy
+# on the admin Email-template page; an empty stored value means this default.
+DEFAULT_EMAIL_TEMPLATE = """\
+Hey {{ first_name }}!
+
+Your Lunchtag {{ "pairings" if partners|length > 1 else "pairing" }} for this week \
+{{ "are" if partners|length > 1 else "is" }}: {{ partner_names }}.\
+{% for p in partners %}{% if p.info %}\
+{% if partners|length > 1 %} About {{ p.name }}: {% else %} Some quick info about them: {% endif %}\
+{{ p.info }}{% endif %}{% endfor %} Have fun! Reach out to board if you have any questions.
+
+As usual, this email was sent automatically from {{ website_url }}. Check the lunchtag page on the website to opt-out!
+
+Have a great lunchtag,
+Maneet Mehta
+YDA Social Chair"""
 
 
 def base_url() -> str:
@@ -143,33 +164,79 @@ def _partner_info_sentences(profile) -> str:
     return " ".join(sentences)
 
 
-def _pairing_email_body(first_name: str, partners: list[tuple[str, object]]) -> str:
-    """partners: [(display name, profile-or-None), ...] — usually one, but a
-    trio round gives two."""
-    partner_names = " and ".join(name for name, _ in partners)
-    plural = "pairings" if len(partners) > 1 else "pairing"
-    verb = "are" if len(partners) > 1 else "is"
-    intro = f"Your Lunchtag {plural} for this week {verb}: {partner_names}."
-    for name, profile in partners:
-        info = _partner_info_sentences(profile)
-        if info and len(partners) > 1:
-            intro += f" About {name}: {info}"
-        elif info:
-            intro += f" Some quick info about them: {info}"
-    return "\n".join(
-        [
-            f"Hey {first_name}!",
-            "",
-            intro + " Have fun! Reach out to board if you have any questions.",
-            "",
-            f"As usual, this email was sent automatically from {base_url()}. "
-            "Check the lunchtag page on the website to opt-out!",
-            "",
-            "Have a great lunchtag,",
-            "Maneet Mehta",
-            "YDA Social Chair",
-        ]
+def get_email_subject(db_path=None) -> str:
+    from portal.auth import store
+
+    return store.get_setting(EMAIL_SUBJECT_KEY, db_path=db_path) or DEFAULT_EMAIL_SUBJECT
+
+
+def get_email_template(db_path=None) -> str:
+    from portal.auth import store
+
+    return store.get_setting(EMAIL_TEMPLATE_KEY, db_path=db_path) or DEFAULT_EMAIL_TEMPLATE
+
+
+def set_email_template(subject: str, template: str, db_path=None) -> None:
+    """Store the admin-edited subject/template. Empty values mean 'use the
+    built-in default'."""
+    from portal.auth import store
+
+    store.set_setting(EMAIL_SUBJECT_KEY, subject or "", db_path=db_path)
+    store.set_setting(EMAIL_TEMPLATE_KEY, template or "", db_path=db_path)
+
+
+def _jinja_env():
+    # Sandboxed: admin-supplied templates cannot reach Python internals.
+    from jinja2.sandbox import SandboxedEnvironment
+
+    return SandboxedEnvironment(autoescape=False)
+
+
+def _email_context(first_name: str, partners: list[dict]) -> dict:
+    return {
+        "first_name": first_name,
+        "partners": partners,
+        "partner_names": " and ".join(p["name"] for p in partners),
+        "website_url": base_url(),
+    }
+
+
+def render_pairing_email(first_name: str, partners: list[dict], db_path=None) -> str:
+    """Render the stored template; if it's broken, fall back to the default so
+    a bad edit can never stop pairing emails."""
+    context = _email_context(first_name, partners)
+    try:
+        return _jinja_env().from_string(get_email_template(db_path=db_path)).render(**context)
+    except Exception:
+        log.exception("Custom email template failed to render; using default")
+        return _jinja_env().from_string(DEFAULT_EMAIL_TEMPLATE).render(**context)
+
+
+SAMPLE_PARTNER = {
+    "name": "Handsome Dan",
+    "class_year": "2027",
+    "residential_college": "Branford",
+    "major": "Philosophy",
+    "second_major": "Economics",
+    "fun_facts": "Has attended every YDA meeting since 1889",
+    "dining_hall": "Commons",
+}
+
+
+def preview_pairing_email(db_path=None) -> tuple[str, str | None]:
+    """(rendered preview with sample data, error message or None) — for the
+    admin edit page, where errors should be visible rather than swallowed."""
+    from portal.domain.models import PlayerProfile
+
+    sample = dict(SAMPLE_PARTNER)
+    sample["info"] = _partner_info_sentences(
+        PlayerProfile(player_id=0, **{k: v for k, v in SAMPLE_PARTNER.items() if k != "name"})
     )
+    context = _email_context("Ava", [sample])
+    try:
+        return _jinja_env().from_string(get_email_template(db_path=db_path)).render(**context), None
+    except Exception as exc:
+        return "", f"{type(exc).__name__}: {exc}"
 
 
 def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
@@ -193,14 +260,26 @@ def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
             if profile is not None and not profile.email_notifications:
                 opted_out += 1
                 continue
-            partners = [
-                (names.get(q, f"#{q}"), repo.get_profile(q))
-                for q in group.member_ids
-                if q != pid
-            ]
+            partners = []
+            for q in group.member_ids:
+                if q == pid:
+                    continue
+                partner_profile = repo.get_profile(q)
+                partners.append(
+                    {
+                        "name": names.get(q, f"#{q}"),
+                        "class_year": partner_profile.class_year if partner_profile else None,
+                        "residential_college": partner_profile.residential_college if partner_profile else None,
+                        "major": partner_profile.major if partner_profile else None,
+                        "second_major": partner_profile.second_major if partner_profile else None,
+                        "fun_facts": partner_profile.fun_facts if partner_profile else None,
+                        "dining_hall": partner_profile.dining_hall if partner_profile else None,
+                        "info": _partner_info_sentences(partner_profile),
+                    }
+                )
             first_name = names.get(pid, "there").split()[0]
-            body = _pairing_email_body(first_name, partners)
-            result = send_email(to, "Your LunchTag pairing this week", body)
+            body = render_pairing_email(first_name, partners, db_path=db_path)
+            result = send_email(to, get_email_subject(db_path=db_path), body)
             if result == "sent":
                 sent += 1
             else:

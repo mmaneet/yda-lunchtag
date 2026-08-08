@@ -142,3 +142,65 @@ def test_confirm_flow_respects_toggle(auth_env, db_path, monkeypatch):
     repo.close()
     resp = client.post(f"/lunchtag/admin/draft/{draft.session_id}/confirm", follow_redirects=True)
     assert b"dry-run" in resp.data
+
+
+# --- editable email template -------------------------------------------------
+
+
+def test_custom_template_overrides_default(db_path, monkeypatch):
+    _clean_env(monkeypatch)
+    repo = Repository(db_path)
+    a = repo.add_player("Ava")
+    b = repo.add_player("Ben")
+    repo.upsert_profile(a.id, display_name="Ava")
+    repo.upsert_profile(b.id, display_name="Ben")
+    store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
+    notifications.set_email_template(
+        "Lunch time!", "Yo {{ first_name }}, you got {{ partner_names }}.", db_path=db_path
+    )
+    sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
+    repo.confirm_draft(sid, 0.0)
+    sent = []
+    monkeypatch.setattr(notifications, "send_email",
+                        lambda to, subject, body: (sent.append((subject, body)), "sent")[1])
+    monkeypatch.setattr(notifications, "post_slack", lambda text: "sent")
+    notifications.send_pairing_notifications(repo, sid, db_path=db_path)
+    assert sent[0] == ("Lunch time!", "Yo Ava, you got Ben.")
+    repo.close()
+
+
+def test_broken_template_falls_back_to_default(db_path):
+    notifications.set_email_template("", "{{ undefined_thing() }}", db_path=db_path)
+    body = notifications.render_pairing_email(
+        "Ava", [dict(notifications.SAMPLE_PARTNER, info="")], db_path=db_path
+    )
+    assert body.startswith("Hey Ava!")  # default template used
+    preview, error = notifications.preview_pairing_email(db_path=db_path)
+    assert error is not None  # but the admin page surfaces the problem
+
+
+def test_reset_restores_default(db_path):
+    notifications.set_email_template("Custom", "custom body", db_path=db_path)
+    assert notifications.get_email_template(db_path=db_path) == "custom body"
+    notifications.set_email_template("", "", db_path=db_path)
+    assert notifications.get_email_template(db_path=db_path) == notifications.DEFAULT_EMAIL_TEMPLATE
+    assert notifications.get_email_subject(db_path=db_path) == notifications.DEFAULT_EMAIL_SUBJECT
+
+
+def test_admin_template_page_roundtrip(auth_env, db_path):
+    app = create_app(db_path)
+    store.set_role("boss@yale.edu", "admin", db_path=db_path)
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_email"] = "boss@yale.edu"
+    resp = client.get("/lunchtag/admin/email-template")
+    assert resp.status_code == 200
+    assert b"Handsome Dan" in resp.data  # preview rendered with sample data
+    assert b"Hey Ava!" in resp.data
+    client.post("/lunchtag/admin/email-template",
+                data={"subject": "S", "template": "hi {{ first_name }}"})
+    resp = client.get("/lunchtag/admin/email-template")
+    assert b"hi Ava" in resp.data  # preview uses saved template
+    client.post("/lunchtag/admin/email-template", data={"action": "reset"})
+    resp = client.get("/lunchtag/admin/email-template")
+    assert b"Hey Ava!" in resp.data

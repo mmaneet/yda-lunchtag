@@ -393,6 +393,31 @@ def admin_history_detail(session_id: int):
     )
 
 
+@bp.route("/admin/email-template", methods=["GET", "POST"])
+def admin_email_template():
+    db = current_app.config["DB_PATH"]
+    if request.method == "POST":
+        if request.form.get("action") == "reset":
+            notifications.set_email_template("", "", db_path=db)
+            flash("Email template reset to the default.")
+        else:
+            notifications.set_email_template(
+                request.form.get("subject", "").strip(),
+                request.form.get("template", ""),
+                db_path=db,
+            )
+            flash("Email template saved.")
+        return redirect(url_for("lunchtag.admin_email_template"))
+    preview, error = notifications.preview_pairing_email(db_path=db)
+    return render_template(
+        "lunchtag/email_template.html",
+        subject=notifications.get_email_subject(db_path=db),
+        template_source=notifications.get_email_template(db_path=db),
+        preview=preview,
+        error=error,
+    )
+
+
 @bp.route("/admin/reset")
 def admin_reset_view():
     return render_template("lunchtag/reset.html")

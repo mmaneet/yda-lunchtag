@@ -84,6 +84,8 @@ When an admin confirms a draft, every member with a linked email gets a pairing 
 
 Members control their own delivery: the LunchTag page has Email/Slack notification toggles (both on by default, stored on `player_profiles`); opted-out members are skipped and counted in the admin's confirmation summary. The email follows the board's template (partner name, class year, college, major(s) unless Undeclared, fun facts, dining hall — missing facts drop their sentence) and is signed by the Social Chair.
 
+Admins can edit the email subject and body on the **Email template** admin page (sandboxed Jinja, stored in `app_settings`, live preview with sample data, one-click reset). A broken saved template can never block sends — the built-in default is the automatic fallback, and the edit page surfaces the error.
+
 Two independent safety layers, both off by default:
 
 1. **Master switch** (config-as-data): `python -m portal.cli notifications on|off|status`.

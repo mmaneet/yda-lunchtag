@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Pairing email template</h2>
+  <p class="muted">
+    This is the email members receive when pairings are pushed. It uses Jinja
+    syntax; a broken template can't stop sends — the built-in default is used
+    as a fallback — but check the preview below after saving.
+  </p>
+  <form action="{{ url_for('lunchtag.admin_email_template') }}" method="post" class="stacked-form template-form">
+    <label>
+      Subject
+      <input type="text" name="subject" value="{{ subject }}">
+    </label>
+    <label>
+      Body template
+      <textarea name="template" rows="16" spellcheck="false">{{ template_source }}</textarea>
+    </label>
+    <div class="actions">
+      <button type="submit">Save</button>
+      <button class="ghost" type="submit" name="action" value="reset"
+              onclick="return confirm('Replace the current template with the built-in default?')">
+        Reset to default
+      </button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Available variables</h2>
+  <table>
+    <tbody>
+      <tr><td><code>{{ '{{ first_name }}' }}</code></td><td>Recipient's first name</td></tr>
+      <tr><td><code>{{ '{{ partner_names }}' }}</code></td><td>Partner name(s), joined with "and"</td></tr>
+      <tr><td><code>{{ '{{ website_url }}' }}</code></td><td>The portal URL</td></tr>
+      <tr><td><code>{{ '{% for p in partners %} … {% endfor %}' }}</code></td>
+          <td>Each partner: <code>p.name</code>, <code>p.class_year</code>, <code>p.residential_college</code>,
+              <code>p.major</code>, <code>p.second_major</code>, <code>p.fun_facts</code>,
+              <code>p.dining_hall</code>, and <code>p.info</code> (the ready-made
+              "quick info" sentences that skip missing fields)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2>Preview <span class="muted">(sample recipient "Ava", partner "Handsome Dan")</span></h2>
+  {% if error %}
+  <p class="muted">Template error — the default will be used for real sends until this is fixed:</p>
+  <pre class="email-preview error">{{ error }}</pre>
+  {% else %}
+  <pre class="email-preview">{{ preview }}</pre>
+  {% endif %}
+</section>
+{% endblock %}

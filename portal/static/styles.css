@@ -619,3 +619,27 @@ th, td {
   height: 16px;
   accent-color: var(--yale-blue);
 }
+
+.template-form textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+
+.template-form {
+  max-width: 720px !important;
+}
+
+.email-preview {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  white-space: pre-wrap;
+  font-size: 0.88rem;
+  font-family: inherit;
+}
+
+.email-preview.error {
+  color: var(--danger);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
