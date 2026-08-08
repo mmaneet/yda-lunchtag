@@ -396,17 +396,18 @@ th, td {
 
 .pref-widgets {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Cards wrap to fewer columns instead of shrinking past readability;
+     natural height (no fixed aspect ratio) so content never clips. */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 16px;
+  align-items: stretch;
 }
 
 .pref-widget {
-  aspect-ratio: 1 / 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  overflow-y: auto;
 }
 
 .pref-widget h3 {
@@ -455,6 +456,7 @@ th, td {
 
 .pref-form {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   width: 100%;
   margin-top: auto;
@@ -462,7 +464,7 @@ th, td {
 
 .pref-form select {
   flex: 1;
-  min-width: 0;
+  min-width: 150px;
   font: inherit;
   color: var(--ink);
   padding: 8px 10px;
@@ -499,15 +501,6 @@ th, td {
 
 .edit-profile[open] summary {
   margin-bottom: 8px;
-}
-
-@media (max-width: 640px) {
-  .pref-widgets {
-    grid-template-columns: 1fr;
-  }
-  .pref-widget {
-    aspect-ratio: auto;
-  }
 }
 
 /* --- Portal tabs ----------------------------------------------------------- */
