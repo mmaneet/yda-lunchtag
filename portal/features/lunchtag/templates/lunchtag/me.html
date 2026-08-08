@@ -105,6 +105,32 @@
         </form>
         <p class="muted pref-note">Only one player can be selected at a time.</p>
       </section>
+
+      <section class="panel pref-widget">
+        <div class="pref-icon bell-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+            <path d="M12 2a6 6 0 0 0-6 6v3.3l-1.7 3.4a1 1 0 0 0 .9 1.3h13.6a1 1 0 0 0 .9-1.3L18 11.3V8a6 6 0 0 0-6-6zm-2.2 15a2.3 2.3 0 0 0 4.4 0z"></path>
+          </svg>
+        </div>
+        <h3>Notifications</h3>
+        <p class="muted">Pairing announcements by email and Slack.</p>
+        <form action="{{ url_for('lunchtag.update_notifications') }}" method="post" class="stacked-form">
+          <label class="switch">
+            <input type="checkbox" name="email" value="1"
+                   {% if profile is none or profile.email_notifications %}checked{% endif %}
+                   onchange="this.form.submit()">
+            <span class="slider"></span>
+            Email notifications
+          </label>
+          <label class="switch">
+            <input type="checkbox" name="slack" value="1"
+                   {% if profile is none or profile.slack_notifications %}checked{% endif %}
+                   onchange="this.form.submit()">
+            <span class="slider"></span>
+            Slack notifications
+          </label>
+        </form>
+      </section>
     </div>
   </div>
 
@@ -126,26 +152,6 @@
       {% else %}
       <p class="muted">Nothing here yet — past weeks will pile up as rounds go out.</p>
       {% endif %}
-    </section>
-
-    <section class="panel">
-      <h2>Notifications</h2>
-      <form action="{{ url_for('lunchtag.update_notifications') }}" method="post" class="stacked-form">
-        <label class="switch">
-          <input type="checkbox" name="email" value="1"
-                 {% if profile is none or profile.email_notifications %}checked{% endif %}>
-          <span class="slider"></span>
-          Email notifications
-        </label>
-        <label class="switch">
-          <input type="checkbox" name="slack" value="1"
-                 {% if profile is none or profile.slack_notifications %}checked{% endif %}>
-          <span class="slider"></span>
-          Slack notifications
-        </label>
-        <button type="submit">Save</button>
-      </form>
-      <p class="muted pref-note">Pairing announcements arrive by email and Slack. Opt out anytime.</p>
     </section>
   </aside>
 </div>
