@@ -143,6 +143,10 @@ def main() -> None:
     elif args.command == "remind-admins":
         from portal import notifications
 
+        if not notifications.notifications_enabled():
+            print("Notifications are off — skipping admin reminder. "
+                  "Enable with: python -m portal.cli notifications on")
+            return
         result = notifications.send_admin_reminder()
         print(
             f"Admin reminder: {result['admins']} admins, "
