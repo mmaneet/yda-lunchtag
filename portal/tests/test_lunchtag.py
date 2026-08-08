@@ -113,7 +113,7 @@ def test_notification_toggles_default_on_and_save(auth_env, db_path):
     app = create_app(db_path)
     client = onboarded_member(app, "alice@yale.edu", "Alice")
     html = client.get("/lunchtag").get_data(as_text=True)
-    assert "Notifications" in html
+    assert "Email notifications" in html and "Slack notifications" in html
     assert html.count("checked") == 2  # both toggles on by default
     # Turn email off, keep slack on.
     client.post("/lunchtag/notifications", data={"slack": "1"})

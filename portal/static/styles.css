@@ -734,3 +734,10 @@ th, td {
   background: #e8eef7;
   color: var(--yale-blue);
 }
+
+.toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: auto 0;
+}
