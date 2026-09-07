@@ -11,7 +11,7 @@ The public YDA website (Squarespace) is separate and out of scope here — see [
 Push to `main` on GitHub → Railway auto-builds and deploys. A failed build never deploys; the site stays on the last good version. Secrets and connection strings live in Railway environment variables (see `.env.example` for the variable names).
 
 - Railway project: `yda-member-portal` (service `web` + Postgres plugin)
-- Live URL: https://web-production-f7a671.up.railway.app
+- Live URL: https://lunchtag.yaledebate.org
 - Start command (`gunicorn portal.app:app`) and restart policy live in `railway.json`; Python version is pinned in `.python-version`.
 - In production the app uses Postgres (`DATABASE_URL` set); locally and in CI it uses SQLite. Same schema, same code.
 
@@ -70,7 +70,7 @@ Sign-in is Google OAuth (OpenID Connect via Authlib), restricted to yale.edu acc
 
 **Env vars** (see `.env.example`): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; optional `DUMMY_LOGIN_EMAIL` (testing backdoor — never set once real member data is loaded).
 
-**Google Cloud Console** (one-time, already done): OAuth 2.0 Client ID (Web application) with redirect URIs `http://localhost:5000/auth/callback` and `https://web-production-f7a671.up.railway.app/auth/callback`. If the app moves to a custom domain, add `https://<domain>/auth/callback` — step 2 of the domain-move checklist in CLAUDE.md.
+**Google Cloud Console** (one-time, already done): OAuth 2.0 Client ID (Web application) with redirect URIs `http://localhost:5000/auth/callback`, `https://lunchtag.yaledebate.org/auth/callback`, and the fallback `https://web-production-f7a671.up.railway.app/auth/callback`. If the app moves to a custom domain, add `https://<domain>/auth/callback` — step 2 of the domain-move checklist in CLAUDE.md.
 
 **Sign-in policy** (data, not code — `portal/auth/`): the email must be a *verified* `@yale.edu` address (from ID-token claims; `hd` is only a hint). Optional whitelist: `allowed_emails` table + enforcement toggle in `app_settings` (key `auth_whitelist_enforced`, default off), managed via `portal.auth.store` functions.
 

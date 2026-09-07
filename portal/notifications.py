@@ -41,7 +41,7 @@ YDA Social Chair"""
 
 
 def base_url() -> str:
-    return os.environ.get("PORTAL_BASE_URL", "https://web-production-f7a671.up.railway.app").rstrip("/")
+    return os.environ.get("PORTAL_BASE_URL", "https://lunchtag.yaledebate.org").rstrip("/")
 
 
 def notifications_enabled(db_path=None) -> bool:
