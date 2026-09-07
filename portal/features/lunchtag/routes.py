@@ -436,13 +436,20 @@ def _slack_sync_report(repo):
             if key:
                 by_norm.setdefault(key, []).append(m)
     linked_emails = auth_store.emails_by_player(db_path=current_app.config["DB_PATH"])
+    known_slack = auth_store.slack_users_by_player(db_path=current_app.config["DB_PATH"])
     report = {"linkable": [], "non_yale": [], "unmatched": [], "already_linked": 0,
-              "slack_members": len(members)}
+              "slack_ids": [], "slack_members": len(members)}
     for player in repo.list_players():
+        hits = by_norm.get(slack.normalize_name(player.name), [])
+        unique = {m["id"]: m for m in hits}
+        # One unambiguous name match is enough to know where to DM them —
+        # messaging is low-stakes, unlike login identity (emails below).
+        if len(unique) == 1 and player.id not in known_slack:
+            m = next(iter(unique.values()))
+            report["slack_ids"].append((player, m["id"], m["email"]))
         if player.id in linked_emails:
             report["already_linked"] += 1
             continue
-        hits = by_norm.get(slack.normalize_name(player.name), [])
         emails = sorted({m["email"] for m in hits if m["email"]})
         if len(emails) == 1 and emails[0].endswith("@yale.edu"):
             report["linkable"].append((player, emails[0]))
@@ -468,7 +475,12 @@ def admin_slack_sync():
     if request.method == "POST":
         for player, email in report["linkable"]:
             auth_store.link_player_email(email, player.id, db_path=current_app.config["DB_PATH"])
-        flash(f"Linked {len(report['linkable'])} members to their Slack-verified yale.edu emails.")
+        for player, slack_id, slack_email in report["slack_ids"]:
+            auth_store.set_slack_user(player.id, slack_id, slack_email, db_path=current_app.config["DB_PATH"])
+        flash(
+            f"Linked {len(report['linkable'])} yale.edu emails and recorded Slack accounts "
+            f"for {len(report['slack_ids'])} members (DMs now reach them directly)."
+        )
         return redirect(url_for("lunchtag.admin_slack_sync"))
     return render_template("lunchtag/slack_sync.html", enabled=True, report=report)
 

@@ -230,7 +230,7 @@ def test_slack_dm_respects_toggle_and_missing_users(db_path, monkeypatch):
     repo.confirm_draft(sid, 0.0)
 
     dms = []
-    def fake_dm(email, text):
+    def fake_dm(email, text, user_id=None):
         dms.append((email, text))
         return "no-slack-user" if email == "cara@yale.edu" else "sent"
     monkeypatch.setattr(notifications, "send_slack_dm", fake_dm)
@@ -262,3 +262,38 @@ def test_normalize_name():
 
     assert normalize_name("Zoë  O'Brien-Smith") == "zoe obriensmith"
     assert normalize_name("  Justin KIM ") == "justin kim"
+
+
+def test_dm_uses_stored_slack_id_over_email_lookup(db_path, monkeypatch):
+    _clean_env(monkeypatch)
+    repo = Repository(db_path)
+    a = repo.add_player("Ava")
+    b = repo.add_player("Ben")
+    repo.upsert_profile(a.id, display_name="Ava")
+    repo.upsert_profile(b.id, display_name="Ben")
+    store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
+    store.link_player_email("ben@yale.edu", b.id, db_path=db_path)
+    store.set_slack_user(b.id, "U_BEN", "ben@gmail.com", db_path=db_path)  # Gmail on Slack
+    sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
+    repo.confirm_draft(sid, 0.0)
+    calls = []
+    monkeypatch.setattr(notifications, "send_slack_dm",
+                        lambda email, text, user_id=None: (calls.append((email, user_id)), "sent")[1])
+    monkeypatch.setattr(notifications, "send_email", lambda *a: "sent")
+    monkeypatch.setattr(notifications, "post_slack", lambda text: "sent")
+    notifications.send_pairing_notifications(repo, sid, db_path=db_path)
+    assert ("ava@yale.edu", None) in calls      # no stored ID -> email lookup
+    assert ("ben@yale.edu", "U_BEN") in calls   # stored ID wins
+    repo.close()
+
+
+def test_slack_send_dm_prefers_user_id(monkeypatch):
+    from portal import slack
+
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    sent = []
+    monkeypatch.setattr(slack, "send_dm_to_user", lambda uid, text: (sent.append(uid), "sent")[1])
+    monkeypatch.setattr(slack, "lookup_user_id", lambda email: None)
+    assert slack.send_dm("x@yale.edu", "hi", user_id="U42") == "sent"
+    assert sent == ["U42"]
+    assert slack.send_dm("x@yale.edu", "hi") == "no-slack-user"

@@ -137,10 +137,10 @@ def post_slack(text: str) -> str:
     return "sent"
 
 
-def send_slack_dm(email: str, text: str) -> str:
+def send_slack_dm(email: str, text: str, user_id: str | None = None) -> str:
     from portal import slack
 
-    return slack.send_dm(email, text)
+    return slack.send_dm(email, text, user_id=user_id)
 
 
 # --- message builders + senders ---------------------------------------------
@@ -292,6 +292,7 @@ def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
     pairing_session = repo.get_session(session_id)
     names = repo.display_names()
     emails = store.emails_by_player(db_path=db_path)
+    slack_ids = store.slack_users_by_player(db_path=db_path)
     counts = {
         "emails_sent": 0, "emails_dry_run": 0, "members_without_email": 0, "opted_out": 0,
         "dms_sent": 0, "dms_dry_run": 0, "dms_no_slack_user": 0, "dms_opted_out": 0,
@@ -315,7 +316,9 @@ def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
                 counts["opted_out"] += 1
             if profile is None or profile.slack_notifications:
                 try:
-                    result = send_slack_dm(to, render_pairing_dm(first_name, partners))
+                    result = send_slack_dm(
+                        to, render_pairing_dm(first_name, partners), user_id=slack_ids.get(pid)
+                    )
                 except Exception:
                     log.exception("Slack DM to %s failed", to)
                     result = "no-slack-user"

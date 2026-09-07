@@ -233,11 +233,16 @@ def test_slack_sync_buckets_and_links(auth_env, db_path, monkeypatch):
     assert "No Slack match (1)" in html and "Cara Diaz" in html
     assert "Someone Else" not in html  # non-roster Slack members aren't listed
 
+    assert "Slack accounts to record for DMs (2)" in html  # Ava and Ben (any email)
+
     admin.post("/lunchtag/admin/slack-sync")
     assert store.get_player_id_for_email("ava.lin@yale.edu", db_path=db_path) == ava.id
     assert store.get_player_id_for_email("ben@gmail.com", db_path=db_path) is None  # never auto-linked
+    # Ben's Slack account is recorded even though his Slack email is a Gmail.
+    assert store.slack_users_by_player(db_path=db_path) == {ava.id: "U1", ben.id: "U2"}
     html = admin.get("/lunchtag/admin/slack-sync").get_data(as_text=True)
     assert "Ready to auto-link (0)" in html  # idempotent
+    assert "Slack accounts to record for DMs (0)" in html
 
 
 def test_slack_sync_page_without_token(auth_env, db_path, monkeypatch):

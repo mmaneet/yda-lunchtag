@@ -88,18 +88,28 @@ def normalize_name(name: str) -> str:
 # --- sending ----------------------------------------------------------------
 
 
-def send_dm(email: str, text: str) -> str:
-    """DM the workspace member with this email. Returns 'sent', 'dry-run',
-    or 'no-slack-user' (email not in the workspace)."""
+def send_dm_to_user(user_id: str, text: str) -> str:
+    """DM a workspace member by Slack user ID."""
     if not enabled():
-        log.info("[dry-run] slack DM to %s: %s", email, text[:80])
+        log.info("[dry-run] slack DM to %s: %s", user_id, text[:80])
         return "dry-run"
-    user_id = lookup_user_id(email)
-    if user_id is None:
-        return "no-slack-user"
     channel = _call("conversations.open", users=user_id)["channel"]["id"]
     _call("chat.postMessage", channel=channel, text=text)
     return "sent"
+
+
+def send_dm(email: str, text: str, user_id: str | None = None) -> str:
+    """DM a member: by stored Slack user ID when known, else by looking up
+    their email in the workspace. Returns 'sent', 'dry-run', or
+    'no-slack-user' (no ID and the email isn't in the workspace)."""
+    if not enabled():
+        log.info("[dry-run] slack DM to %s: %s", user_id or email, text[:80])
+        return "dry-run"
+    if not user_id:
+        user_id = lookup_user_id(email)
+        if user_id is None:
+            return "no-slack-user"
+    return send_dm_to_user(user_id, text)
 
 
 def post_channel(text: str) -> str:

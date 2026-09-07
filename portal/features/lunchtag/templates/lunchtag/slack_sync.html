@@ -22,11 +22,29 @@
       {% endfor %}
     </tbody>
   </table>
-  <form action="{{ url_for('lunchtag.admin_slack_sync') }}" method="post" class="actions">
-    <button type="submit">Link these {{ report.linkable | length }}</button>
-  </form>
   {% else %}
   <p class="muted">Nothing new to link.</p>
+  {% endif %}
+
+  <h3>Slack accounts to record for DMs ({{ report.slack_ids | length }})</h3>
+  <p class="muted">
+    Unambiguous name matches — any email. Recording the Slack account means
+    pairing DMs reach them even if their Slack uses a different email than their login.
+  </p>
+  {% if report.slack_ids %}
+  <ul>
+    {% for player, slack_id, slack_email in report.slack_ids %}
+    <li>{{ player.name }} <span class="muted">({{ slack_email or slack_id }})</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">All matched members already recorded.</p>
+  {% endif %}
+
+  {% if report.linkable or report.slack_ids %}
+  <form action="{{ url_for('lunchtag.admin_slack_sync') }}" method="post" class="actions">
+    <button type="submit">Apply: link {{ report.linkable | length }} emails, record {{ report.slack_ids | length }} Slack accounts</button>
+  </form>
   {% endif %}
 
   <h3>Needs a yale.edu email from you ({{ report.non_yale | length }})</h3>

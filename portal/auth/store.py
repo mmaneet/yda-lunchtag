@@ -56,6 +56,17 @@ CREATE TABLE IF NOT EXISTS player_emails (
 )
 """
 
+# A player's Slack identity, so DMs work even when their Slack account uses a
+# different email than their portal login (e.g. a personal Gmail).
+_CREATE_PLAYER_SLACK = """
+CREATE TABLE IF NOT EXISTS player_slack (
+    player_id INTEGER PRIMARY KEY,
+    slack_user_id TEXT NOT NULL,
+    slack_email TEXT,
+    updated_at TEXT NOT NULL
+)
+"""
+
 ROLES = ("member", "admin")
 
 
@@ -65,6 +76,7 @@ def _open(db_path: Path | str | None = None):
     conn.execute(_CREATE_APP_SETTINGS)
     conn.execute(_CREATE_USER_ROLES)
     conn.execute(_CREATE_PLAYER_EMAILS)
+    conn.execute(_CREATE_PLAYER_SLACK)
     conn.commit()
     return conn
 
@@ -232,6 +244,30 @@ def get_email_for_player(player_id: int, db_path=None) -> str | None:
             (player_id,),
         ).fetchone()
         return row["email"] if row is not None else None
+    finally:
+        conn.close()
+
+
+def set_slack_user(player_id: int, slack_user_id: str, slack_email: str | None, db_path=None) -> None:
+    conn = _open(db_path)
+    try:
+        conn.execute(
+            "INSERT INTO player_slack (player_id, slack_user_id, slack_email, updated_at) "
+            "VALUES (?, ?, ?, ?) ON CONFLICT (player_id) DO UPDATE SET "
+            "slack_user_id = excluded.slack_user_id, slack_email = excluded.slack_email, "
+            "updated_at = excluded.updated_at",
+            (player_id, slack_user_id, slack_email, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def slack_users_by_player(db_path=None) -> dict[int, str]:
+    conn = _open(db_path)
+    try:
+        rows = conn.execute("SELECT player_id, slack_user_id FROM player_slack").fetchall()
+        return {row["player_id"]: row["slack_user_id"] for row in rows}
     finally:
         conn.close()
 
