@@ -18,6 +18,7 @@ def no_auth_env(monkeypatch):
 def auth_env(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
+    monkeypatch.setenv("NOTIFY_SYNC", "1")
 
 
 def onboarded_member(app, email, name, opt_in=True):

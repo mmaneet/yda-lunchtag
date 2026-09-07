@@ -17,6 +17,37 @@
   </div>
 </section>
 
+{% if session.status == 'confirmed' %}
+<section class="panel">
+  <h3>Notifications</h3>
+  {% if notification_runs %}
+  <table>
+    <thead><tr><th>Started</th><th>Channels</th><th>Status</th><th>Summary</th></tr></thead>
+    <tbody>
+      {% for run in notification_runs %}
+      <tr>
+        <td>{{ run.started_at[:16].replace('T', ' ') }}</td>
+        <td>{{ run.channels }}</td>
+        <td>{{ run.status }}{% if run.status == 'running' %} <span class="muted">(refresh)</span>{% endif %}</td>
+        <td>{{ run.summary or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No notifications have been sent for this round.</p>
+  {% endif %}
+  <form action="{{ url_for('lunchtag.admin_resend_notifications', session_id=session.id) }}" method="post" class="form-row"
+        onsubmit="return confirm('Send the selected notifications to every member in this round?')">
+    <label class="switch"><input type="checkbox" name="email" value="1"><span class="slider"></span> Email</label>
+    <label class="switch"><input type="checkbox" name="dm" value="1" checked><span class="slider"></span> Slack DMs</label>
+    <label class="switch"><input type="checkbox" name="channel" value="1" checked><span class="slider"></span> Channel post</label>
+    <button type="submit" {% if not notifications_on %}disabled{% endif %}>Send</button>
+  </form>
+  <p class="muted pref-note">Runs in the background; refresh this page for the summary. Emails are off by default here to avoid double-sending.</p>
+</section>
+{% endif %}
+
 <section class="panel">
   <h3>Repeat edges</h3>
   {% if repeat_pairs %}

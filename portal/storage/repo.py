@@ -438,6 +438,30 @@ class Repository:
             history.append((summary, tuple(m["player_id"] for m in members)))
         return history
 
+    # Notification runs (background sends)
+    def start_notification_run(self, session_id: int, channels: Iterable[str]) -> int:
+        row = self.conn.execute(
+            "INSERT INTO notification_runs (session_id, channels, status, started_at) "
+            "VALUES (?, ?, 'running', ?) RETURNING id",
+            (session_id, ",".join(channels), _now_iso()),
+        ).fetchone()
+        self.conn.commit()
+        return row["id"]
+
+    def finish_notification_run(self, run_id: int, status: str, summary: str) -> None:
+        self.conn.execute(
+            "UPDATE notification_runs SET status = ?, summary = ?, finished_at = ? WHERE id = ?",
+            (status, summary, _now_iso(), run_id),
+        )
+        self.conn.commit()
+
+    def notification_runs(self, session_id: int) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM notification_runs WHERE session_id = ? ORDER BY id DESC",
+            (session_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     # Completions (leaderboard)
     def latest_confirmed_session(self) -> Session | None:
         row = self.conn.execute(

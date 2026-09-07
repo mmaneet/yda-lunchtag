@@ -345,21 +345,10 @@ def admin_confirm_draft(session_id: int):
     repo.confirm_draft(session_id, breakdown.total)
     flash("Draft confirmed and saved to history.")
     if notifications.notifications_enabled(current_app.config["DB_PATH"]):
-        try:
-            summary = notifications.send_pairing_notifications(
-                repo, session_id, db_path=current_app.config["DB_PATH"]
-            )
-            flash(
-                f"Emails: {summary['emails_sent']} sent, {summary['emails_dry_run']} dry-run, "
-                f"{summary['opted_out']} opted out, "
-                f"{summary['members_without_email']} without a linked email. "
-                f"Slack DMs: {summary['dms_sent']} sent, {summary['dms_dry_run']} dry-run, "
-                f"{summary['dms_opted_out']} opted out, "
-                f"{summary['dms_no_slack_user']} not found in Slack. "
-                f"Channel post: {summary['slack']}."
-            )
-        except Exception as exc:
-            flash(f"Pairings saved, but sending notifications failed: {exc}")
+        notifications.send_in_background(
+            current_app.config["DB_PATH"], session_id, sync=current_app.config.get("NOTIFY_SYNC", False)
+        )
+        flash("Notifications are sending in the background — open this round in History to see the summary.")
     else:
         flash("Notifications are off — enable with: python -m portal.cli notifications on")
     return redirect(url_for("lunchtag.admin_history"))
@@ -395,7 +384,30 @@ def admin_history_detail(session_id: int):
         groups=pairing_session.groups,
         players_map=players_map,
         repeat_pairs=_repeat_pairs(repo, breakdown, stats, players_map),
+        notification_runs=repo.notification_runs(session_id),
+        notifications_on=notifications.notifications_enabled(current_app.config["DB_PATH"]),
     )
+
+
+@bp.route("/admin/history/<int:session_id>/notify", methods=["POST"])
+def admin_resend_notifications(session_id: int):
+    """(Re)send notifications for a confirmed round, per channel."""
+    repo = get_repo()
+    if repo.get_session(session_id).status != "confirmed":
+        flash("Only confirmed rounds can be sent.")
+        return redirect(url_for("lunchtag.admin_history"))
+    channels = [c for c in notifications.ALL_CHANNELS if request.form.get(c) == "1"]
+    if not channels:
+        flash("Pick at least one channel.")
+    elif not notifications.notifications_enabled(current_app.config["DB_PATH"]):
+        flash("Notifications are off — enable with: python -m portal.cli notifications on")
+    else:
+        notifications.send_in_background(
+            current_app.config["DB_PATH"], session_id, channels,
+            sync=current_app.config.get("NOTIFY_SYNC", False),
+        )
+        flash(f"Sending {', '.join(channels)} in the background — refresh for the summary.")
+    return redirect(url_for("lunchtag.admin_history_detail", session_id=session_id))
 
 
 @bp.route("/admin/templates", methods=["GET", "POST"])

@@ -372,12 +372,17 @@ def render_pairing_dm(first_name: str, partners: list[dict], db_path=None) -> st
     return render_message("pairing_dm", _pairing_context(first_name, partners), db_path=db_path)
 
 
-def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
+ALL_CHANNELS = ("email", "dm", "channel")
+
+
+def send_pairing_notifications(repo, session_id: int, db_path=None, channels=ALL_CHANNELS) -> dict:
     """Notify every linked member of their partner(s): email and/or Slack DM
-    per their toggles, plus a channel announcement. Returns counts for the
-    admin flash."""
+    per their toggles, plus a channel announcement. `channels` selects which
+    of email / dm / channel to send (resends can target just one). Returns
+    counts for the admin summary."""
     from portal.auth import store
 
+    channels = set(channels)
     pairing_session = repo.get_session(session_id)
     names = repo.display_names()
     emails = store.emails_by_player(db_path=db_path)
@@ -397,13 +402,21 @@ def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
             profile = repo.get_profile(pid)
             partners = _partner_dicts(repo, names, group.member_ids, pid)
             first_name = names.get(pid, "there").split()[0]
-            if profile is None or profile.email_notifications:
+            if "email" not in channels:
+                pass
+            elif profile is None or profile.email_notifications:
                 body = render_pairing_email(first_name, partners, db_path=db_path)
-                result = send_email(to, get_email_subject(db_path=db_path), body)
+                try:
+                    result = send_email(to, get_email_subject(db_path=db_path), body)
+                except Exception:
+                    log.exception("Email to %s failed", to)
+                    result = "failed"
                 counts["emails_sent" if result == "sent" else "emails_dry_run"] += 1
             else:
                 counts["opted_out"] += 1
-            if profile is None or profile.slack_notifications:
+            if "dm" not in channels:
+                pass
+            elif profile is None or profile.slack_notifications:
                 try:
                     result = send_slack_dm(
                         to, render_pairing_dm(first_name, partners, db_path=db_path),
@@ -416,12 +429,60 @@ def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
                 counts[key] += 1
             else:
                 counts["dms_opted_out"] += 1
-    pairings = [[names.get(pid, f"#{pid}") for pid in group.member_ids] for group in pairing_session.groups]
-    counts["slack"] = post_slack(
-        render_message("channel_announcement",
-                       {"website_url": base_url(), "pairings": pairings}, db_path=db_path)
-    )
+    if "channel" in channels:
+        pairings = [[names.get(pid, f"#{pid}") for pid in group.member_ids] for group in pairing_session.groups]
+        try:
+            counts["slack"] = post_slack(
+                render_message("channel_announcement",
+                               {"website_url": base_url(), "pairings": pairings}, db_path=db_path)
+            )
+        except Exception:
+            log.exception("Channel announcement failed")
+            counts["slack"] = "failed"
+    else:
+        counts["slack"] = "skipped"
     return counts
+
+
+def summarize(counts: dict) -> str:
+    return (
+        f"Emails: {counts['emails_sent']} sent, {counts['emails_dry_run']} dry-run/failed, "
+        f"{counts['opted_out']} opted out, {counts['members_without_email']} without a linked email. "
+        f"Slack DMs: {counts['dms_sent']} sent, {counts['dms_dry_run']} dry-run, "
+        f"{counts['dms_opted_out']} opted out, {counts['dms_no_slack_user']} not reachable. "
+        f"Channel post: {counts['slack']}."
+    )
+
+
+def send_in_background(db_path, session_id: int, channels=ALL_CHANNELS, *, sync: bool = False) -> int:
+    """Kick off a notification run for a round and return its run id. Runs
+    in a daemon thread so the admin's request returns immediately (44 emails
+    + 44 DMs take minutes — far past the web worker's timeout). `sync=True`
+    runs inline (tests, CLI)."""
+    import threading
+
+    from portal.storage.repo import Repository
+
+    repo = Repository(db_path)
+    run_id = repo.start_notification_run(session_id, channels)
+    repo.close()
+
+    def work():
+        worker_repo = Repository(db_path)
+        try:
+            counts = send_pairing_notifications(worker_repo, session_id, db_path=db_path, channels=channels)
+            worker_repo.finish_notification_run(run_id, "done", summarize(counts))
+        except Exception as exc:
+            log.exception("Notification run %s failed", run_id)
+            worker_repo.finish_notification_run(run_id, "failed", f"{type(exc).__name__}: {exc}")
+        finally:
+            worker_repo.close()
+
+    if sync:
+        work()
+    else:
+        threading.Thread(target=work, name=f"notify-{run_id}", daemon=True).start()
+    return run_id
 
 
 def send_admin_reminder(db_path=None) -> dict:

@@ -36,6 +36,9 @@ def create_app(db_path: Path | None = None) -> Flask:
     app = Flask(__name__)
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", "lunchtag-dev")
     app.config["DB_PATH"] = db_path or default_db_path()
+    # Notification sends run in a background thread; NOTIFY_SYNC=1 runs them
+    # inline (tests, debugging).
+    app.config["NOTIFY_SYNC"] = os.environ.get("NOTIFY_SYNC") == "1"
     init_auth(app)
     app.register_blueprint(profile_bp)
     app.register_blueprint(lunchtag_bp, url_prefix="/lunchtag")

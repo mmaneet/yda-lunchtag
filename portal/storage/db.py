@@ -78,6 +78,17 @@ CREATE TABLE IF NOT EXISTS lunchtag_completions (
     FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS notification_runs (
+    id {pk},
+    session_id INTEGER NOT NULL,
+    channels TEXT NOT NULL,
+    status TEXT NOT NULL,
+    summary TEXT,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
 CREATE INDEX IF NOT EXISTS idx_groups_session ON groups(session_id);
 CREATE INDEX IF NOT EXISTS idx_group_members_player ON group_members(player_id);

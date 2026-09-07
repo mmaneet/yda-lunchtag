@@ -84,7 +84,7 @@ Sign-in is Google OAuth (OpenID Connect via Authlib), restricted to yale.edu acc
 
 ## Notifications (email + Slack)
 
-When an admin confirms a draft, every member with a linked email gets a pairing email (partner names + their profile info), and a summary posts to Slack. A Railway cron service (`railway.cron.json`: Sundays 23:00 UTC) runs `python -m portal.cli remind-admins`, emailing every admin a reminder to push new pairings.
+When an admin confirms a draft, notifications are sent **in a background thread** (44 emails + 44 DMs take minutes, well past the web worker's timeout): every member with a linked email gets a pairing email (partner names + their profile info), Slack DMs go out, and the pairing list posts to the channel. Each run is recorded in `notification_runs`; the round's page under History shows the status/summary and has a per-channel **Send** form (Email / Slack DMs / Channel post) for resends — emails unchecked by default to avoid double-sending. `NOTIFY_SYNC=1` runs sends inline (tests/debugging). A Railway cron service (`railway.cron.json`: Sundays 23:00 UTC) runs `python -m portal.cli remind-admins`, emailing every admin a reminder to push new pairings.
 
 Members control their own delivery: the LunchTag page has Email/Slack notification toggles (both on by default, stored on `player_profiles`); opted-out members are skipped and counted in the admin's confirmation summary. The email follows the board's template (partner name, class year, college, major(s) unless Undeclared, fun facts, dining hall — missing facts drop their sentence) and is signed by the Social Chair.
 

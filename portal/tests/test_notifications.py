@@ -141,14 +141,30 @@ def test_confirm_flow_respects_toggle(auth_env, db_path, monkeypatch):
     # Toggle off: confirming mentions notifications are off.
     resp = client.post(f"/lunchtag/admin/draft/{draft.session_id}/confirm", follow_redirects=True)
     assert b"Notifications are off" in resp.data
-    # Toggle on: dry-run counts are reported (no SMTP configured).
+    # Toggle on: a run is recorded with dry-run counts (nothing configured).
     notifications.set_notifications_enabled(True, db_path=db_path)
     client.post("/lunchtag/admin/draft/generate")
     repo = Repository(db_path)
     draft = repo.get_draft()
     repo.close()
-    resp = client.post(f"/lunchtag/admin/draft/{draft.session_id}/confirm", follow_redirects=True)
-    assert b"dry-run" in resp.data
+    sid = draft.session_id
+    resp = client.post(f"/lunchtag/admin/draft/{sid}/confirm", follow_redirects=True)
+    assert b"sending in the background" in resp.data
+    repo = Repository(db_path)
+    runs = repo.notification_runs(sid)
+    repo.close()
+    assert len(runs) == 1 and runs[0]["status"] == "done"
+    assert "dry-run" in runs[0]["summary"]
+    # The round's page shows the run and offers a per-channel resend.
+    html = client.get(f"/lunchtag/admin/history/{sid}").get_data(as_text=True)
+    assert "dry-run" in html and 'name="dm"' in html
+    client.post(f"/lunchtag/admin/history/{sid}/notify", data={"dm": "1"})
+    repo = Repository(db_path)
+    runs = repo.notification_runs(sid)
+    repo.close()
+    assert len(runs) == 2 and runs[0]["channels"] == "dm"
+    assert "Emails: 0 sent" in runs[0]["summary"]  # email channel skipped
+    assert "Channel post: skipped" in runs[0]["summary"]
 
 
 # --- editable email template -------------------------------------------------
@@ -318,3 +334,45 @@ def test_slack_send_dm_prefers_user_id(monkeypatch):
     assert slack.send_dm("x@yale.edu", "hi", user_id="U42") == "sent"
     assert sent == ["U42"]
     assert slack.send_dm("x@yale.edu", "hi") == "no-slack-user"
+
+
+def test_channel_selection_limits_sends(db_path, monkeypatch):
+    _clean_env(monkeypatch)
+    repo = Repository(db_path)
+    a = repo.add_player("Ava")
+    b = repo.add_player("Ben")
+    for p in (a, b):
+        repo.upsert_profile(p.id, display_name=p.name)
+    store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
+    store.link_player_email("ben@yale.edu", b.id, db_path=db_path)
+    sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
+    repo.confirm_draft(sid, 0.0)
+    calls = {"email": 0, "dm": 0, "channel": 0}
+    monkeypatch.setattr(notifications, "send_email", lambda *a: (calls.__setitem__("email", calls["email"] + 1), "sent")[1])
+    monkeypatch.setattr(notifications, "send_slack_dm", lambda *a, **k: (calls.__setitem__("dm", calls["dm"] + 1), "sent")[1])
+    monkeypatch.setattr(notifications, "post_slack", lambda t: (calls.__setitem__("channel", calls["channel"] + 1), "sent")[1])
+    notifications.send_pairing_notifications(repo, sid, db_path=db_path, channels=("dm",))
+    assert calls == {"email": 0, "dm": 2, "channel": 0}
+    notifications.send_pairing_notifications(repo, sid, db_path=db_path, channels=("email", "channel"))
+    assert calls == {"email": 2, "dm": 2, "channel": 1}
+    repo.close()
+
+
+def test_failed_email_does_not_abort_run(db_path, monkeypatch):
+    _clean_env(monkeypatch)
+    repo = Repository(db_path)
+    a = repo.add_player("Ava")
+    b = repo.add_player("Ben")
+    store.link_player_email("ava@yale.edu", a.id, db_path=db_path)
+    store.link_player_email("ben@yale.edu", b.id, db_path=db_path)
+    sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
+    repo.confirm_draft(sid, 0.0)
+    def flaky(to, subject, body):
+        if to == "ava@yale.edu":
+            raise RuntimeError("smtp hiccup")
+        return "sent"
+    monkeypatch.setattr(notifications, "send_email", flaky)
+    monkeypatch.setattr(notifications, "post_slack", lambda t: "sent")
+    counts = notifications.send_pairing_notifications(repo, sid, db_path=db_path, channels=("email",))
+    assert counts["emails_sent"] == 1 and counts["emails_dry_run"] == 1
+    repo.close()
