@@ -135,3 +135,27 @@ def test_opted_out_members_excluded_from_pairing_pool(auth_env, db_path):
     pool_names = {p.name for p in repo.list_pairing_pool()}
     repo.close()
     assert pool_names == {"Ay", "Bee"}
+
+
+def test_preprovisioned_member_keeps_opt_in_through_onboarding(auth_env, db_path):
+    """Admin-imported roster members arrive opted in but not onboarded; the
+    onboarding switch must reflect that so submitting doesn't opt them out."""
+    from portal.storage.repo import Repository
+
+    repo = Repository(db_path)
+    p = repo.add_player("Returning Member")
+    repo.set_lunchtag_opt_in(p.id, True)  # minimal profile, onboarded=0
+    repo.close()
+    store.link_player_email("ret@yale.edu", p.id, db_path=db_path)
+    client = create_app(db_path).test_client()
+    with client.session_transaction() as sess:
+        sess["user_email"] = "ret@yale.edu"
+    assert client.get("/profile").headers["Location"].endswith("/welcome")  # still onboards
+    html = client.get("/welcome/setup").get_data(as_text=True)
+    assert 'name="lunchtag_opt_in" value="1" checked' in html
+    assert "Returning Member" in html  # existing player name suggested
+    client.post("/welcome", data={"display_name": "Returning Member", "lunchtag_opt_in": "1"})
+    repo = Repository(db_path)
+    assert repo.get_profile(p.id).lunchtag_opt_in is True
+    assert len(repo.list_players()) == 1  # reused, not duplicated
+    repo.close()

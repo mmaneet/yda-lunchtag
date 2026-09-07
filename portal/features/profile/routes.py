@@ -114,10 +114,14 @@ def welcome_setup():
     if guard is not None:
         return guard
     player = linked_player(repo)
+    # Pre-provisioned members (roster imported by an admin) arrive already
+    # opted in; the switch reflects that so onboarding doesn't opt them out.
+    profile = repo.get_profile(player.id) if player else None
     return render_template(
         "welcome_setup.html",
         suggested_name=player.name if player else (session.get("user_name") or ""),
         colleges=RESIDENTIAL_COLLEGES,
+        opted_in=bool(profile and profile.lunchtag_opt_in),
     )
 
 
