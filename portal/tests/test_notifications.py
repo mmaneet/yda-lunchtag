@@ -70,7 +70,8 @@ def test_pairing_notifications_content_and_counts(db_path, monkeypatch):
     assert "Some quick info" not in ben_body
     assert "pairings are out" in slack_posts[0]
     assert "Check your Slack DMs, email, or the website" in slack_posts[0]
-    assert "Ava" not in slack_posts[0]  # channel post names nobody
+    assert "• Ava Lin & Ben Ortiz" in slack_posts[0]  # every group listed
+    assert "• Cara" in slack_posts[0]
     assert "disabled on the website" in slack_posts[0]  # opt-out tag
     assert summary["dms_dry_run"] == 2  # no bot token -> DMs dry-run
     repo.close()

@@ -190,7 +190,8 @@ _You can turn off Slack notifications on the website's LunchTag page._"""
 
 DEFAULT_CHANNEL_TEMPLATE = """\
 :sandwich: *Hey everyone! This week's LunchTag pairings are out!*
-Check your Slack DMs, email, or the website for your partner.
+{% for group in pairings %}• {{ group | join(' & ') }}
+{% endfor %}Check your Slack DMs, email, or the website for your partner's info.
 {{ website_url }}/lunchtag
 Post a lunch photo here to log it — leaderboard: {{ website_url }}/leaderboard
 _Notifications can be disabled on the website's LunchTag page._"""
@@ -213,6 +214,11 @@ PAIRING_VARIABLES = [
      "quick-info sentences that skip missing fields)"),
 ]
 SITE_VARIABLES = [("{{ website_url }}", "The portal URL")]
+CHANNEL_VARIABLES = SITE_VARIABLES + [
+    ("{% for group in pairings %} … {% endfor %}",
+     "Each group as a list of names — e.g. {{ group | join(' & ') }}"),
+    ("{{ pairings | length }}", "Number of groups this week"),
+]
 
 TEMPLATES = {
     "pairing_email_subject": {
@@ -229,7 +235,7 @@ TEMPLATES = {
     },
     "channel_announcement": {
         "label": "Weekly #lunchtag announcement", "channel": "Slack channel", "multiline": True,
-        "default": DEFAULT_CHANNEL_TEMPLATE, "variables": SITE_VARIABLES, "sample": "site",
+        "default": DEFAULT_CHANNEL_TEMPLATE, "variables": CHANNEL_VARIABLES, "sample": "channel",
     },
     "admin_reminder_subject": {
         "label": "Sunday admin reminder — subject", "channel": "Email", "multiline": False,
@@ -294,6 +300,9 @@ def _sample_context(kind: str) -> dict:
             PlayerProfile(player_id=0, **{k: v for k, v in SAMPLE_PARTNER.items() if k != "name"})
         )
         return _pairing_context("Ava", [sample])
+    if kind == "channel":
+        return {"website_url": base_url(),
+                "pairings": [["Ava Lin", "Handsome Dan"], ["Ben Ortiz", "Cara Diaz", "Dev Patel"]]}
     return {"website_url": base_url()}
 
 
@@ -407,8 +416,10 @@ def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
                 counts[key] += 1
             else:
                 counts["dms_opted_out"] += 1
+    pairings = [[names.get(pid, f"#{pid}") for pid in group.member_ids] for group in pairing_session.groups]
     counts["slack"] = post_slack(
-        render_message("channel_announcement", {"website_url": base_url()}, db_path=db_path)
+        render_message("channel_announcement",
+                       {"website_url": base_url(), "pairings": pairings}, db_path=db_path)
     )
     return counts
 
