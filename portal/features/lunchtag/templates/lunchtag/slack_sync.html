@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Slack sync</h2>
+  {% if not enabled %}
+  <p class="muted">Slack isn't configured (no <code>SLACK_BOT_TOKEN</code> on this deployment).</p>
+  {% else %}
+  <p class="muted">
+    Matches roster players to YDA Slack members by name. Only exact matches
+    with a verified <code>@yale.edu</code> Slack email are auto-linked — everything
+    else is listed for you to resolve on the Players page.
+    {{ report.slack_members }} people in the workspace; {{ report.already_linked }} players already linked.
+  </p>
+
+  <h3>Ready to auto-link ({{ report.linkable | length }})</h3>
+  {% if report.linkable %}
+  <table>
+    <thead><tr><th>Player</th><th>Slack email</th></tr></thead>
+    <tbody>
+      {% for player, email in report.linkable %}
+      <tr><td>{{ player.name }}</td><td>{{ email }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <form action="{{ url_for('lunchtag.admin_slack_sync') }}" method="post" class="actions">
+    <button type="submit">Link these {{ report.linkable | length }}</button>
+  </form>
+  {% else %}
+  <p class="muted">Nothing new to link.</p>
+  {% endif %}
+
+  <h3>Needs a yale.edu email from you ({{ report.non_yale | length }})</h3>
+  {% if report.non_yale %}
+  <p class="muted">In Slack, but registered with a non-Yale address. Enter their Yale email on the Players page.</p>
+  <table>
+    <thead><tr><th>Player</th><th>Slack email</th></tr></thead>
+    <tbody>
+      {% for player, emails in report.non_yale %}
+      <tr><td>{{ player.name }}</td><td>{{ emails | join(', ') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">None.</p>
+  {% endif %}
+
+  <h3>No Slack match ({{ report.unmatched | length }})</h3>
+  {% if report.unmatched %}
+  <p class="muted">Not found in Slack by name — graduated, a nickname display name, or not in the workspace.</p>
+  <ul>
+    {% for player in report.unmatched %}<li>{{ player.name }}</li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">None.</p>
+  {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

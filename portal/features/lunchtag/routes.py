@@ -350,10 +350,13 @@ def admin_confirm_draft(session_id: int):
                 repo, session_id, db_path=current_app.config["DB_PATH"]
             )
             flash(
-                f"Notifications: {summary['emails_sent']} emails sent, "
-                f"{summary['emails_dry_run']} dry-run, "
-                f"{summary['members_without_email']} members without a linked email; "
-                f"Slack: {summary['slack']}."
+                f"Emails: {summary['emails_sent']} sent, {summary['emails_dry_run']} dry-run, "
+                f"{summary['opted_out']} opted out, "
+                f"{summary['members_without_email']} without a linked email. "
+                f"Slack DMs: {summary['dms_sent']} sent, {summary['dms_dry_run']} dry-run, "
+                f"{summary['dms_opted_out']} opted out, "
+                f"{summary['dms_no_slack_user']} not found in Slack. "
+                f"Channel post: {summary['slack']}."
             )
         except Exception as exc:
             flash(f"Pairings saved, but sending notifications failed: {exc}")
@@ -418,6 +421,56 @@ def admin_email_template():
         preview=preview,
         error=error,
     )
+
+
+def _slack_sync_report(repo):
+    """Match roster players to Slack members by name. Returns buckets; only
+    yale.edu matches are eligible for auto-linking."""
+    from portal import slack
+
+    members = slack.list_members()
+    by_norm: dict[str, list[dict]] = {}
+    for m in members:
+        for cand in (m["name"], m["display_name"]):
+            key = slack.normalize_name(cand)
+            if key:
+                by_norm.setdefault(key, []).append(m)
+    linked_emails = auth_store.emails_by_player(db_path=current_app.config["DB_PATH"])
+    report = {"linkable": [], "non_yale": [], "unmatched": [], "already_linked": 0,
+              "slack_members": len(members)}
+    for player in repo.list_players():
+        if player.id in linked_emails:
+            report["already_linked"] += 1
+            continue
+        hits = by_norm.get(slack.normalize_name(player.name), [])
+        emails = sorted({m["email"] for m in hits if m["email"]})
+        if len(emails) == 1 and emails[0].endswith("@yale.edu"):
+            report["linkable"].append((player, emails[0]))
+        elif emails:
+            report["non_yale"].append((player, emails))
+        else:
+            report["unmatched"].append(player)
+    return report
+
+
+@bp.route("/admin/slack-sync", methods=["GET", "POST"])
+def admin_slack_sync():
+    from portal import slack
+
+    repo = get_repo()
+    if not slack.enabled():
+        return render_template("lunchtag/slack_sync.html", enabled=False, report=None)
+    try:
+        report = _slack_sync_report(repo)
+    except Exception as exc:
+        flash(f"Slack lookup failed: {exc}")
+        return redirect(url_for("lunchtag.admin_players"))
+    if request.method == "POST":
+        for player, email in report["linkable"]:
+            auth_store.link_player_email(email, player.id, db_path=current_app.config["DB_PATH"])
+        flash(f"Linked {len(report['linkable'])} members to their Slack-verified yale.edu emails.")
+        return redirect(url_for("lunchtag.admin_slack_sync"))
+    return render_template("lunchtag/slack_sync.html", enabled=True, report=report)
 
 
 @bp.route("/admin/reset")

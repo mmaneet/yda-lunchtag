@@ -120,7 +120,12 @@ def send_email(to: str, subject: str, body: str) -> str:
 
 
 def post_slack(text: str) -> str:
-    """Post to the configured Slack incoming webhook; 'sent' or 'dry-run'."""
+    """Post the channel announcement. Prefers the bot (SLACK_BOT_TOKEN);
+    falls back to an incoming webhook; 'dry-run' when neither is set."""
+    from portal import slack
+
+    if slack.enabled():
+        return slack.post_channel(text)
     url = os.environ.get("SLACK_WEBHOOK_URL")
     if not url:
         log.info("[dry-run] slack post: %s", text[:120])
@@ -130,6 +135,12 @@ def post_slack(text: str) -> str:
     resp = requests.post(url, json={"text": text}, timeout=10)
     resp.raise_for_status()
     return "sent"
+
+
+def send_slack_dm(email: str, text: str) -> str:
+    from portal import slack
+
+    return slack.send_dm(email, text)
 
 
 # --- message builders + senders ---------------------------------------------
@@ -239,65 +250,87 @@ def preview_pairing_email(db_path=None) -> tuple[str, str | None]:
         return "", f"{type(exc).__name__}: {exc}"
 
 
+def _partner_dicts(repo, names, member_ids, pid) -> list[dict]:
+    partners = []
+    for q in member_ids:
+        if q == pid:
+            continue
+        p = repo.get_profile(q)
+        partners.append(
+            {
+                "name": names.get(q, f"#{q}"),
+                "class_year": p.class_year if p else None,
+                "residential_college": p.residential_college if p else None,
+                "major": p.major if p else None,
+                "second_major": p.second_major if p else None,
+                "fun_facts": p.fun_facts if p else None,
+                "dining_hall": p.dining_hall if p else None,
+                "info": _partner_info_sentences(p),
+            }
+        )
+    return partners
+
+
+def render_pairing_dm(first_name: str, partners: list[dict]) -> str:
+    """Short Slack DM version of the pairing notice."""
+    names_text = " and ".join(p["name"] for p in partners)
+    lines = [f":sandwich: Hey {first_name}! Your LunchTag pairing this week: *{names_text}*."]
+    for p in partners:
+        if p["info"]:
+            lines.append(f"About {p['name']}: {p['info']}" if len(partners) > 1 else p["info"])
+    lines.append(f"Reach out and grab lunch this week! Details + history: {base_url()}/lunchtag")
+    lines.append("_You can turn off Slack notifications on the website's LunchTag page._")
+    return "\n".join(lines)
+
+
 def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
-    """Email every opted-in, linked member their partner(s) + profile info,
-    and post a summary to Slack. Returns counts for the admin flash."""
+    """Notify every linked member of their partner(s): email and/or Slack DM
+    per their toggles, plus a channel announcement. Returns counts for the
+    admin flash."""
     from portal.auth import store
 
     pairing_session = repo.get_session(session_id)
     names = repo.display_names()
     emails = store.emails_by_player(db_path=db_path)
-    sent = dry = skipped = opted_out = 0
+    counts = {
+        "emails_sent": 0, "emails_dry_run": 0, "members_without_email": 0, "opted_out": 0,
+        "dms_sent": 0, "dms_dry_run": 0, "dms_no_slack_user": 0, "dms_opted_out": 0,
+    }
     pair_lines = []
     for group in pairing_session.groups:
         pair_lines.append(" & ".join(names.get(pid, f"#{pid}") for pid in group.member_ids))
         for pid in group.member_ids:
             to = emails.get(pid)
             if not to:
-                skipped += 1
+                counts["members_without_email"] += 1
                 continue
             profile = repo.get_profile(pid)
-            if profile is not None and not profile.email_notifications:
-                opted_out += 1
-                continue
-            partners = []
-            for q in group.member_ids:
-                if q == pid:
-                    continue
-                partner_profile = repo.get_profile(q)
-                partners.append(
-                    {
-                        "name": names.get(q, f"#{q}"),
-                        "class_year": partner_profile.class_year if partner_profile else None,
-                        "residential_college": partner_profile.residential_college if partner_profile else None,
-                        "major": partner_profile.major if partner_profile else None,
-                        "second_major": partner_profile.second_major if partner_profile else None,
-                        "fun_facts": partner_profile.fun_facts if partner_profile else None,
-                        "dining_hall": partner_profile.dining_hall if partner_profile else None,
-                        "info": _partner_info_sentences(partner_profile),
-                    }
-                )
+            partners = _partner_dicts(repo, names, group.member_ids, pid)
             first_name = names.get(pid, "there").split()[0]
-            body = render_pairing_email(first_name, partners, db_path=db_path)
-            result = send_email(to, get_email_subject(db_path=db_path), body)
-            if result == "sent":
-                sent += 1
+            if profile is None or profile.email_notifications:
+                body = render_pairing_email(first_name, partners, db_path=db_path)
+                result = send_email(to, get_email_subject(db_path=db_path), body)
+                counts["emails_sent" if result == "sent" else "emails_dry_run"] += 1
             else:
-                dry += 1
+                counts["opted_out"] += 1
+            if profile is None or profile.slack_notifications:
+                try:
+                    result = send_slack_dm(to, render_pairing_dm(first_name, partners))
+                except Exception:
+                    log.exception("Slack DM to %s failed", to)
+                    result = "no-slack-user"
+                key = {"sent": "dms_sent", "dry-run": "dms_dry_run"}.get(result, "dms_no_slack_user")
+                counts[key] += 1
+            else:
+                counts["dms_opted_out"] += 1
     slack_text = (
-        ":sandwich: *This week's LunchTag pairings are out!*\n"
-        + "\n".join(f"• {line}" for line in pair_lines)
-        + f"\nDetails are in your email — profiles and history at {base_url()}/lunchtag"
-        + "\n_Notifications can be disabled on the website's LunchTag page._"
+        ":sandwich: *Hey everyone! This week's LunchTag pairings are out!*\n"
+        "Check your Slack DMs, email, or the website for your partner.\n"
+        f"{base_url()}/lunchtag\n"
+        "_Notifications can be disabled on the website's LunchTag page._"
     )
-    slack = post_slack(slack_text)
-    return {
-        "emails_sent": sent,
-        "emails_dry_run": dry,
-        "members_without_email": skipped,
-        "opted_out": opted_out,
-        "slack": slack,
-    }
+    counts["slack"] = post_slack(slack_text)
+    return counts
 
 
 def send_admin_reminder(db_path=None) -> dict:

@@ -91,7 +91,9 @@ Admins can edit the email subject and body on the **Email template** admin page 
 Two independent safety layers, both off by default:
 
 1. **Master switch** (config-as-data): `python -m portal.cli notifications on|off|status`.
-2. **Credentials**: with no email/Slack env vars, everything is a dry-run — counted and logged, nothing sent. Email transports, in preference order: **Gmail API** (sends from a personal account; one-time `gmail.send` consent via `python scripts/get_gmail_token.py` — see that file for the full recipe) or any **SMTP** provider. Slack needs an Incoming Webhook URL from api.slack.com. `PORTAL_BASE_URL` controls links in messages.
+2. **Credentials**: with no email/Slack env vars, everything is a dry-run — counted and logged, nothing sent. Email transports, in preference order: **Gmail API** (sends from a personal account; one-time `gmail.send` consent via `python scripts/get_gmail_token.py` — see that file for the full recipe) or any **SMTP** provider. `PORTAL_BASE_URL` controls links in messages.
+
+**Slack** (`portal/slack.py`, bot token from the LunchTag app at api.slack.com — scopes listed in `.env.example`): on confirm, each linked member with the Slack toggle on gets a DM with their pairing (looked up by their linked email via `users.lookupByEmail`; members whose Slack email differs are counted as "not found in Slack"), and the bot posts a "pairings are out" notice to `SLACK_CHANNEL`. The admin **Slack sync** page matches roster players to workspace members by name: exact matches with a verified `@yale.edu` Slack email are auto-linkable in one click; Gmail-registered and unmatched members are listed for manual linking on the Players page. Non-roster Slack members are never imported — new members onboard themselves on the site. The old `SLACK_WEBHOOK_URL` remains as a fallback for the channel post only.
 
 The cron service must have "Config file path" set to `railway.cron.json` in its Railway settings (otherwise it would inherit the web start command from `railway.json`), plus the same `DATABASE_URL` reference and `SMTP_*` vars as the web service.
 

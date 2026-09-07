@@ -202,3 +202,51 @@ def test_admin_pages_never_mention_strikes(auth_env, db_path):
         # "lunchtag" contains neither word; strip tab labels' safe text first.
         assert "strike" not in html, path
         assert "boost" not in html, path
+
+
+# --- Slack sync (admin) -------------------------------------------------------
+
+
+def test_slack_sync_buckets_and_links(auth_env, db_path, monkeypatch):
+    from portal import slack
+
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    monkeypatch.setattr(slack, "list_members", lambda: [
+        {"id": "U1", "name": "Ava Lin", "display_name": "", "email": "ava.lin@yale.edu"},
+        {"id": "U2", "name": "Ben Ortiz", "display_name": "benny", "email": "ben@gmail.com"},
+        {"id": "U3", "name": "Someone Else", "display_name": "", "email": "else@yale.edu"},
+    ])
+    app = create_app(db_path)
+    repo = Repository(db_path)
+    ava = repo.add_player("Ava Lin")
+    ben = repo.add_player("Ben Ortiz")
+    repo.add_player("Cara Diaz")
+    repo.close()
+    store.set_role("boss@yale.edu", "admin", db_path=db_path)
+    admin = app.test_client()
+    with admin.session_transaction() as sess:
+        sess["user_email"] = "boss@yale.edu"
+
+    html = admin.get("/lunchtag/admin/slack-sync").get_data(as_text=True)
+    assert "Ready to auto-link (1)" in html and "ava.lin@yale.edu" in html
+    assert "Needs a yale.edu email from you (1)" in html and "ben@gmail.com" in html
+    assert "No Slack match (1)" in html and "Cara Diaz" in html
+    assert "Someone Else" not in html  # non-roster Slack members aren't listed
+
+    admin.post("/lunchtag/admin/slack-sync")
+    assert store.get_player_id_for_email("ava.lin@yale.edu", db_path=db_path) == ava.id
+    assert store.get_player_id_for_email("ben@gmail.com", db_path=db_path) is None  # never auto-linked
+    html = admin.get("/lunchtag/admin/slack-sync").get_data(as_text=True)
+    assert "Ready to auto-link (0)" in html  # idempotent
+
+
+def test_slack_sync_page_without_token(auth_env, db_path, monkeypatch):
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    app = create_app(db_path)
+    store.set_role("boss@yale.edu", "admin", db_path=db_path)
+    admin = app.test_client()
+    with admin.session_transaction() as sess:
+        sess["user_email"] = "boss@yale.edu"
+    resp = admin.get("/lunchtag/admin/slack-sync")
+    assert resp.status_code == 200
+    assert b"isn't configured" in resp.data

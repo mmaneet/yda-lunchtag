@@ -8,7 +8,8 @@ from portal.storage.repo import Repository
 
 def _clean_env(monkeypatch):
     for var in ("SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD",
-                "MAIL_FROM", "SLACK_WEBHOOK_URL"):
+                "MAIL_FROM", "SLACK_WEBHOOK_URL", "SLACK_BOT_TOKEN",
+                "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -68,7 +69,10 @@ def test_pairing_notifications_content_and_counts(db_path, monkeypatch):
     assert "Your Lunchtag pairing for this week is: Ava Lin." in ben_body
     assert "Some quick info" not in ben_body
     assert "pairings are out" in slack_posts[0]
+    assert "Check your Slack DMs, email, or the website" in slack_posts[0]
+    assert "Ava" not in slack_posts[0]  # channel post names nobody
     assert "disabled on the website" in slack_posts[0]  # opt-out tag
+    assert summary["dms_dry_run"] == 2  # no bot token -> DMs dry-run
     repo.close()
 
 
@@ -206,3 +210,55 @@ def test_admin_template_page_roundtrip(auth_env, db_path):
     client.post("/lunchtag/admin/email-template", data={"action": "reset"})
     resp = client.get("/lunchtag/admin/email-template")
     assert b"Hey Ava!" in resp.data
+
+
+# --- Slack DMs ----------------------------------------------------------------
+
+
+def test_slack_dm_respects_toggle_and_missing_users(db_path, monkeypatch):
+    _clean_env(monkeypatch)
+    repo = Repository(db_path)
+    a = repo.add_player("Ava Lin")
+    b = repo.add_player("Ben Ortiz")
+    c = repo.add_player("Cara Diaz")
+    for p in (a, b, c):
+        repo.upsert_profile(p.id, display_name=p.name)
+    repo.set_notification_prefs(b.id, email=True, slack=False)  # Ben: no DMs
+    for p, e in ((a, "ava@yale.edu"), (b, "ben@yale.edu"), (c, "cara@yale.edu")):
+        store.link_player_email(e, p.id, db_path=db_path)
+    sid = repo.create_draft(1, 0.0, [[a.id, b.id, c.id]])
+    repo.confirm_draft(sid, 0.0)
+
+    dms = []
+    def fake_dm(email, text):
+        dms.append((email, text))
+        return "no-slack-user" if email == "cara@yale.edu" else "sent"
+    monkeypatch.setattr(notifications, "send_slack_dm", fake_dm)
+    monkeypatch.setattr(notifications, "send_email", lambda *a: "sent")
+    monkeypatch.setattr(notifications, "post_slack", lambda text: "sent")
+
+    summary = notifications.send_pairing_notifications(repo, sid, db_path=db_path)
+    assert summary["dms_sent"] == 1          # Ava
+    assert summary["dms_opted_out"] == 1     # Ben
+    assert summary["dms_no_slack_user"] == 1 # Cara
+    ava_dm = next(t for e, t in dms if e == "ava@yale.edu")
+    assert "Hey Ava!" in ava_dm
+    assert "Ben Ortiz and Cara Diaz" in ava_dm  # trio: both partners named
+    assert "turn off Slack notifications" in ava_dm
+    repo.close()
+
+
+def test_slack_client_dry_run_without_token(monkeypatch):
+    _clean_env(monkeypatch)
+    from portal import slack
+
+    assert slack.enabled() is False
+    assert slack.send_dm("x@yale.edu", "hi") == "dry-run"
+    assert slack.post_channel("hi") == "dry-run"
+
+
+def test_normalize_name():
+    from portal.slack import normalize_name
+
+    assert normalize_name("Zoë  O'Brien-Smith") == "zoe obriensmith"
+    assert normalize_name("  Justin KIM ") == "justin kim"
