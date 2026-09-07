@@ -398,29 +398,38 @@ def admin_history_detail(session_id: int):
     )
 
 
-@bp.route("/admin/email-template", methods=["GET", "POST"])
-def admin_email_template():
+@bp.route("/admin/templates", methods=["GET", "POST"])
+def admin_templates():
+    """Audit and edit every automated message (email, Slack DM, channel post,
+    admin reminder)."""
     db = current_app.config["DB_PATH"]
     if request.method == "POST":
+        key = request.form.get("key", "")
+        if key not in notifications.TEMPLATES:
+            flash("Unknown template.")
+            return redirect(url_for("lunchtag.admin_templates"))
         if request.form.get("action") == "reset":
-            notifications.set_email_template("", "", db_path=db)
-            flash("Email template reset to the default.")
+            notifications.set_template(key, "", db_path=db)
+            flash(f"{notifications.TEMPLATES[key]['label']}: reset to default.")
         else:
-            notifications.set_email_template(
-                request.form.get("subject", "").strip(),
-                request.form.get("template", ""),
-                db_path=db,
-            )
-            flash("Email template saved.")
-        return redirect(url_for("lunchtag.admin_email_template"))
-    preview, error = notifications.preview_pairing_email(db_path=db)
-    return render_template(
-        "lunchtag/email_template.html",
-        subject=notifications.get_email_subject(db_path=db),
-        template_source=notifications.get_email_template(db_path=db),
-        preview=preview,
-        error=error,
-    )
+            notifications.set_template(key, request.form.get("value", ""), db_path=db)
+            flash(f"{notifications.TEMPLATES[key]['label']}: saved.")
+        return redirect(url_for("lunchtag.admin_templates", _anchor=key))
+    items = []
+    for key, spec in notifications.TEMPLATES.items():
+        preview, error = notifications.preview_message(key, db_path=db)
+        items.append({
+            "key": key, "spec": spec,
+            "value": notifications.get_template(key, db_path=db),
+            "customized": notifications.get_template(key, db_path=db) != spec["default"],
+            "preview": preview, "error": error,
+        })
+    return render_template("lunchtag/templates.html", items=items)
+
+
+@bp.route("/admin/email-template")
+def admin_email_template():
+    return redirect(url_for("lunchtag.admin_templates"))
 
 
 def _slack_sync_report(repo):

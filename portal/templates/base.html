@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>YDA Member Portal · Yale Debate Association</title>
+    <title>LunchTag · Yale Debate Association</title>
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='yda-icon.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
@@ -12,7 +12,7 @@
       <div class="brand">
         <img class="logo" src="{{ url_for('static', filename='yda-logo.png') }}" alt="Yale Debate Association logo">
         <div>
-          <h1>Yale Debate Association Member Resources</h1>
+          <h1>Yale Debate Association LunchTag</h1>
         </div>
       </div>
       {% if user_email or not auth_on %}
@@ -21,8 +21,6 @@
           {% if tab.enabled %}
             <a class="tab {{ 'active' if tab.blueprint == active_blueprint }}"
                href="{{ url_for(tab.endpoint) }}">{{ tab.label }}</a>
-          {% else %}
-            <span class="tab disabled">{{ tab.label }} <em>(Coming Soon!)</em></span>
           {% endif %}
         {% endfor %}
       </nav>
@@ -39,7 +37,7 @@
       <a href="{{ url_for('lunchtag.admin_players') }}">Players</a>
       <a href="{{ url_for('lunchtag.admin_generate') }}">Generate</a>
       <a href="{{ url_for('lunchtag.admin_history') }}">History</a>
-      <a href="{{ url_for('lunchtag.admin_email_template') }}">Email template</a>
+      <a href="{{ url_for('lunchtag.admin_templates') }}">Message templates</a>
       <a href="{{ url_for('lunchtag.admin_slack_sync') }}">Slack sync</a>
       <a href="{{ url_for('lunchtag.admin_reset_view') }}">Reset</a>
     </nav>

@@ -2,8 +2,8 @@
 
 Each feature is a blueprint package under portal/features/<name>/ with its own
 routes and templates. To add a feature: copy an existing feature package,
-register its blueprint here, and add a TABS entry. Disabled TABS entries render
-as faded "(Coming Soon!)" tabs.
+register its blueprint here, and add a TABS entry. Disabled TABS entries are
+hidden from the tab bar until the feature ships.
 """
 
 from __future__ import annotations

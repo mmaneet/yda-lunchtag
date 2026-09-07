@@ -193,23 +193,43 @@ def test_reset_restores_default(db_path):
     assert notifications.get_email_subject(db_path=db_path) == notifications.DEFAULT_EMAIL_SUBJECT
 
 
-def test_admin_template_page_roundtrip(auth_env, db_path):
+def test_admin_templates_page_covers_every_message(auth_env, db_path):
     app = create_app(db_path)
     store.set_role("boss@yale.edu", "admin", db_path=db_path)
     client = app.test_client()
     with client.session_transaction() as sess:
         sess["user_email"] = "boss@yale.edu"
-    resp = client.get("/lunchtag/admin/email-template")
+    resp = client.get("/lunchtag/admin/templates")
     assert resp.status_code == 200
-    assert b"Handsome Dan" in resp.data  # preview rendered with sample data
+    for key in notifications.TEMPLATES:
+        assert f'id="{key}"'.encode() in resp.data
+    assert b"Handsome Dan" in resp.data  # pairing previews use sample data
     assert b"Hey Ava!" in resp.data
-    client.post("/lunchtag/admin/email-template",
-                data={"subject": "S", "template": "hi {{ first_name }}"})
-    resp = client.get("/lunchtag/admin/email-template")
-    assert b"hi Ava" in resp.data  # preview uses saved template
-    client.post("/lunchtag/admin/email-template", data={"action": "reset"})
-    resp = client.get("/lunchtag/admin/email-template")
-    assert b"Hey Ava!" in resp.data
+    # Edit the Slack DM template; preview reflects it and sends use it.
+    client.post("/lunchtag/admin/templates",
+                data={"key": "pairing_dm", "value": "yo {{ first_name }} -> {{ partner_names }}"})
+    resp = client.get("/lunchtag/admin/templates")
+    assert b"yo Ava -&gt; Handsome Dan" in resp.data or b"yo Ava -> Handsome Dan" in resp.data
+    assert notifications.render_pairing_dm("Zed", [dict(notifications.SAMPLE_PARTNER, info="")],
+                                           db_path=db_path) == "yo Zed -> Handsome Dan"
+    # Reset restores the default.
+    client.post("/lunchtag/admin/templates", data={"key": "pairing_dm", "action": "reset"})
+    assert notifications.get_template("pairing_dm", db_path=db_path) == notifications.DEFAULT_DM_TEMPLATE
+    # Unknown keys are rejected; the old URL redirects here.
+    client.post("/lunchtag/admin/templates", data={"key": "nope", "value": "x"})
+    assert client.get("/lunchtag/admin/email-template").headers["Location"].endswith("/admin/templates")
+
+
+def test_admin_reminder_uses_editable_template(db_path, monkeypatch):
+    _clean_env(monkeypatch)
+    store.set_role("boss@yale.edu", "admin", db_path=db_path)
+    notifications.set_template("admin_reminder_subject", "Go go go", db_path=db_path)
+    sent = []
+    monkeypatch.setattr(notifications, "send_email",
+                        lambda to, subject, body: (sent.append(subject), "sent")[1])
+    notifications.send_admin_reminder(db_path=db_path)
+    assert sent == ["Go go go"]
+
 
 
 # --- Slack DMs ----------------------------------------------------------------

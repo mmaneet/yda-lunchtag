@@ -175,25 +175,85 @@ def _partner_info_sentences(profile) -> str:
     return " ".join(sentences)
 
 
-def get_email_subject(db_path=None) -> str:
+# --- message templates (admin-editable, config-as-data) ---------------------
+#
+# Every automated message the portal sends is a sandboxed Jinja template
+# stored in app_settings under its key (empty/missing = built-in default).
+# Admins audit and edit them on the Message templates page. A broken saved
+# template can never block a send: rendering falls back to the default.
+
+DEFAULT_DM_TEMPLATE = """\
+:sandwich: Hey {{ first_name }}! Your LunchTag pairing this week: *{{ partner_names }}*.
+{% for p in partners %}{% if p.info %}{% if partners|length > 1 %}About {{ p.name }}: {% endif %}{{ p.info }}
+{% endif %}{% endfor %}Reach out and grab lunch this week! Details + history: {{ website_url }}/lunchtag
+_You can turn off Slack notifications on the website's LunchTag page._"""
+
+DEFAULT_CHANNEL_TEMPLATE = """\
+:sandwich: *Hey everyone! This week's LunchTag pairings are out!*
+Check your Slack DMs, email, or the website for your partner.
+{{ website_url }}/lunchtag
+_Notifications can be disabled on the website's LunchTag page._"""
+
+DEFAULT_REMINDER_SUBJECT = "LunchTag: push this week's pairings"
+DEFAULT_REMINDER_BODY = """\
+It's Sunday — time to generate and push this week's LunchTag pairings.
+
+Generate: {{ website_url }}/lunchtag/admin/generate
+
+— YDA LunchTag"""
+
+PAIRING_VARIABLES = [
+    ("{{ first_name }}", "Recipient's first name"),
+    ("{{ partner_names }}", 'Partner name(s), joined with "and"'),
+    ("{{ website_url }}", "The portal URL"),
+    ("{% for p in partners %} … {% endfor %}",
+     "Each partner: p.name, p.class_year, p.residential_college, p.major, "
+     "p.second_major, p.fun_facts, p.dining_hall, and p.info (ready-made "
+     "quick-info sentences that skip missing fields)"),
+]
+SITE_VARIABLES = [("{{ website_url }}", "The portal URL")]
+
+TEMPLATES = {
+    "pairing_email_subject": {
+        "label": "Pairing email — subject", "channel": "Email", "multiline": False,
+        "default": DEFAULT_EMAIL_SUBJECT, "variables": PAIRING_VARIABLES, "sample": "pairing",
+    },
+    "pairing_email_template": {
+        "label": "Pairing email — body", "channel": "Email", "multiline": True,
+        "default": DEFAULT_EMAIL_TEMPLATE, "variables": PAIRING_VARIABLES, "sample": "pairing",
+    },
+    "pairing_dm": {
+        "label": "Pairing Slack DM", "channel": "Slack DM", "multiline": True,
+        "default": DEFAULT_DM_TEMPLATE, "variables": PAIRING_VARIABLES, "sample": "pairing",
+    },
+    "channel_announcement": {
+        "label": "Weekly #lunchtag announcement", "channel": "Slack channel", "multiline": True,
+        "default": DEFAULT_CHANNEL_TEMPLATE, "variables": SITE_VARIABLES, "sample": "site",
+    },
+    "admin_reminder_subject": {
+        "label": "Sunday admin reminder — subject", "channel": "Email", "multiline": False,
+        "default": DEFAULT_REMINDER_SUBJECT, "variables": SITE_VARIABLES, "sample": "site",
+    },
+    "admin_reminder_body": {
+        "label": "Sunday admin reminder — body", "channel": "Email", "multiline": True,
+        "default": DEFAULT_REMINDER_BODY, "variables": SITE_VARIABLES, "sample": "site",
+    },
+}
+
+
+def get_template(key: str, db_path=None) -> str:
     from portal.auth import store
 
-    return store.get_setting(EMAIL_SUBJECT_KEY, db_path=db_path) or DEFAULT_EMAIL_SUBJECT
+    return store.get_setting(key, db_path=db_path) or TEMPLATES[key]["default"]
 
 
-def get_email_template(db_path=None) -> str:
+def set_template(key: str, value: str, db_path=None) -> None:
+    """Store an admin edit; empty means 'use the built-in default'."""
     from portal.auth import store
 
-    return store.get_setting(EMAIL_TEMPLATE_KEY, db_path=db_path) or DEFAULT_EMAIL_TEMPLATE
-
-
-def set_email_template(subject: str, template: str, db_path=None) -> None:
-    """Store the admin-edited subject/template. Empty values mean 'use the
-    built-in default'."""
-    from portal.auth import store
-
-    store.set_setting(EMAIL_SUBJECT_KEY, subject or "", db_path=db_path)
-    store.set_setting(EMAIL_TEMPLATE_KEY, template or "", db_path=db_path)
+    if key not in TEMPLATES:
+        raise KeyError(key)
+    store.set_setting(key, value or "", db_path=db_path)
 
 
 def _jinja_env():
@@ -203,24 +263,14 @@ def _jinja_env():
     return SandboxedEnvironment(autoescape=False)
 
 
-def _email_context(first_name: str, partners: list[dict]) -> dict:
-    return {
-        "first_name": first_name,
-        "partners": partners,
-        "partner_names": " and ".join(p["name"] for p in partners),
-        "website_url": base_url(),
-    }
-
-
-def render_pairing_email(first_name: str, partners: list[dict], db_path=None) -> str:
-    """Render the stored template; if it's broken, fall back to the default so
-    a bad edit can never stop pairing emails."""
-    context = _email_context(first_name, partners)
+def render_message(key: str, context: dict, db_path=None) -> str:
+    """Render a stored template; on failure fall back to the default so a bad
+    edit can never stop a send."""
     try:
-        return _jinja_env().from_string(get_email_template(db_path=db_path)).render(**context)
+        return _jinja_env().from_string(get_template(key, db_path=db_path)).render(**context)
     except Exception:
-        log.exception("Custom email template failed to render; using default")
-        return _jinja_env().from_string(DEFAULT_EMAIL_TEMPLATE).render(**context)
+        log.exception("Template %s failed to render; using default", key)
+        return _jinja_env().from_string(TEMPLATES[key]["default"]).render(**context)
 
 
 SAMPLE_PARTNER = {
@@ -234,20 +284,57 @@ SAMPLE_PARTNER = {
 }
 
 
-def preview_pairing_email(db_path=None) -> tuple[str, str | None]:
-    """(rendered preview with sample data, error message or None) — for the
-    admin edit page, where errors should be visible rather than swallowed."""
-    from portal.domain.models import PlayerProfile
+def _sample_context(kind: str) -> dict:
+    if kind == "pairing":
+        from portal.domain.models import PlayerProfile
 
-    sample = dict(SAMPLE_PARTNER)
-    sample["info"] = _partner_info_sentences(
-        PlayerProfile(player_id=0, **{k: v for k, v in SAMPLE_PARTNER.items() if k != "name"})
-    )
-    context = _email_context("Ava", [sample])
+        sample = dict(SAMPLE_PARTNER)
+        sample["info"] = _partner_info_sentences(
+            PlayerProfile(player_id=0, **{k: v for k, v in SAMPLE_PARTNER.items() if k != "name"})
+        )
+        return _pairing_context("Ava", [sample])
+    return {"website_url": base_url()}
+
+
+def preview_message(key: str, db_path=None) -> tuple[str, str | None]:
+    """(rendered preview with sample data, error or None) — for the admin
+    page, where template errors should be visible rather than swallowed."""
+    context = _sample_context(TEMPLATES[key]["sample"])
     try:
-        return _jinja_env().from_string(get_email_template(db_path=db_path)).render(**context), None
+        return _jinja_env().from_string(get_template(key, db_path=db_path)).render(**context), None
     except Exception as exc:
         return "", f"{type(exc).__name__}: {exc}"
+
+
+def _pairing_context(first_name: str, partners: list[dict]) -> dict:
+    return {
+        "first_name": first_name,
+        "partners": partners,
+        "partner_names": " and ".join(p["name"] for p in partners),
+        "website_url": base_url(),
+    }
+
+
+# Thin wrappers kept for the pairing-email call sites and tests.
+def get_email_subject(db_path=None) -> str:
+    return get_template(EMAIL_SUBJECT_KEY, db_path=db_path)
+
+
+def get_email_template(db_path=None) -> str:
+    return get_template(EMAIL_TEMPLATE_KEY, db_path=db_path)
+
+
+def set_email_template(subject: str, template: str, db_path=None) -> None:
+    set_template(EMAIL_SUBJECT_KEY, subject, db_path=db_path)
+    set_template(EMAIL_TEMPLATE_KEY, template, db_path=db_path)
+
+
+def render_pairing_email(first_name: str, partners: list[dict], db_path=None) -> str:
+    return render_message(EMAIL_TEMPLATE_KEY, _pairing_context(first_name, partners), db_path=db_path)
+
+
+def preview_pairing_email(db_path=None) -> tuple[str, str | None]:
+    return preview_message(EMAIL_TEMPLATE_KEY, db_path=db_path)
 
 
 def _partner_dicts(repo, names, member_ids, pid) -> list[dict]:
@@ -271,16 +358,8 @@ def _partner_dicts(repo, names, member_ids, pid) -> list[dict]:
     return partners
 
 
-def render_pairing_dm(first_name: str, partners: list[dict]) -> str:
-    """Short Slack DM version of the pairing notice."""
-    names_text = " and ".join(p["name"] for p in partners)
-    lines = [f":sandwich: Hey {first_name}! Your LunchTag pairing this week: *{names_text}*."]
-    for p in partners:
-        if p["info"]:
-            lines.append(f"About {p['name']}: {p['info']}" if len(partners) > 1 else p["info"])
-    lines.append(f"Reach out and grab lunch this week! Details + history: {base_url()}/lunchtag")
-    lines.append("_You can turn off Slack notifications on the website's LunchTag page._")
-    return "\n".join(lines)
+def render_pairing_dm(first_name: str, partners: list[dict], db_path=None) -> str:
+    return render_message("pairing_dm", _pairing_context(first_name, partners), db_path=db_path)
 
 
 def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
@@ -317,7 +396,8 @@ def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
             if profile is None or profile.slack_notifications:
                 try:
                     result = send_slack_dm(
-                        to, render_pairing_dm(first_name, partners), user_id=slack_ids.get(pid)
+                        to, render_pairing_dm(first_name, partners, db_path=db_path),
+                        user_id=slack_ids.get(pid),
                     )
                 except Exception:
                     log.exception("Slack DM to %s failed", to)
@@ -326,13 +406,9 @@ def send_pairing_notifications(repo, session_id: int, db_path=None) -> dict:
                 counts[key] += 1
             else:
                 counts["dms_opted_out"] += 1
-    slack_text = (
-        ":sandwich: *Hey everyone! This week's LunchTag pairings are out!*\n"
-        "Check your Slack DMs, email, or the website for your partner.\n"
-        f"{base_url()}/lunchtag\n"
-        "_Notifications can be disabled on the website's LunchTag page._"
+    counts["slack"] = post_slack(
+        render_message("channel_announcement", {"website_url": base_url()}, db_path=db_path)
     )
-    counts["slack"] = post_slack(slack_text)
     return counts
 
 
@@ -341,16 +417,10 @@ def send_admin_reminder(db_path=None) -> dict:
     from portal.auth import store
 
     admins = [email for email, role in store.list_roles(db_path=db_path) if role == "admin"]
-    body = "\n".join(
-        [
-            "It's Sunday — time to generate and push this week's LunchTag pairings.",
-            "",
-            f"Generate: {base_url()}/lunchtag/admin/generate",
-            "",
-            "— YDA LunchTag",
-        ]
-    )
-    results = [send_email(a, "LunchTag: push this week's pairings", body) for a in admins]
+    ctx = {"website_url": base_url()}
+    subject = render_message("admin_reminder_subject", ctx, db_path=db_path)
+    body = render_message("admin_reminder_body", ctx, db_path=db_path)
+    results = [send_email(a, subject, body) for a in admins]
     return {
         "admins": len(admins),
         "sent": results.count("sent"),

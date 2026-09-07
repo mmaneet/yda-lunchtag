@@ -741,3 +741,36 @@ th, td {
   gap: 14px;
   margin: auto 0;
 }
+
+/* --- Message templates admin page ------------------------------------------ */
+
+.template-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.template-head h3 {
+  margin: 0;
+}
+
+.tag-custom {
+  background: #e8eef7;
+  border-color: var(--yale-blue);
+  color: var(--yale-blue);
+}
+
+.template-vars {
+  margin: 12px 0;
+  font-size: 0.85rem;
+}
+
+.template-vars summary {
+  cursor: pointer;
+  color: var(--link-blue);
+}
+
+.template-block h4 {
+  margin: 12px 0 6px;
+}

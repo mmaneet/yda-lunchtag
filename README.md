@@ -1,6 +1,6 @@
 # YDA Member Portal
 
-Member resources portal for the Yale Debate Association. Features live as tabs; the first (and currently only) live feature is **LunchTag**, a weekly lunch-pairing system: it generates draft pairings honoring member strikes/boosts, lets admins edit and confirm them, and keeps history so people aren't repeatedly paired together. YDBoba, Events Schedule, Tournament Registration, and Reimbursements are visible as "(Coming Soon!)" tabs.
+Member resources portal for the Yale Debate Association. Features live as tabs; the first (and currently only) live feature is **LunchTag**, a weekly lunch-pairing system: it generates draft pairings honoring member strikes/boosts, lets admins edit and confirm them, and keeps history so people aren't repeatedly paired together. Future features (YDBoba, Events Schedule, Tournament Registration, Reimbursements) are registered in `TABS` but hidden until they ship.
 
 The public YDA website (Squarespace) is separate and out of scope here — see [CLAUDE.md](CLAUDE.md) for the full architecture, governance rules, and roadmap.
 
@@ -62,7 +62,7 @@ portal/
   tests/
 ```
 
-**To add a feature X**: copy the shape of `portal/features/lunchtag/` — a `routes.py` with one blueprint (`template_folder="templates"`, templates under `templates/x/`), register it in `portal/app.py`, flip its `TABS` entry to `enabled: True`, add `portal/tests/test_x.py`. Admin-only routes must have endpoint names starting with `admin_` — the auth gate blocks members from any such endpoint. New tables: `CREATE TABLE IF NOT EXISTS` in a feature-local store module (see `portal/auth/store.py`) or in `portal/storage/db.py` if shared.
+**To add a feature X**: copy the shape of `portal/features/lunchtag/` — a `routes.py` with one blueprint (`template_folder="templates"`, templates under `templates/x/`), register it in `portal/app.py`, flip its `TABS` entry to `enabled: True` (disabled entries are hidden), add `portal/tests/test_x.py`. Admin-only routes must have endpoint names starting with `admin_` — the auth gate blocks members from any such endpoint. New tables: `CREATE TABLE IF NOT EXISTS` in a feature-local store module (see `portal/auth/store.py`) or in `portal/storage/db.py` if shared.
 
 ## Auth
 
@@ -86,7 +86,7 @@ When an admin confirms a draft, every member with a linked email gets a pairing 
 
 Members control their own delivery: the LunchTag page has Email/Slack notification toggles (both on by default, stored on `player_profiles`); opted-out members are skipped and counted in the admin's confirmation summary. The email follows the board's template (partner name, class year, college, major(s) unless Undeclared, fun facts, dining hall — missing facts drop their sentence) and is signed by the Social Chair.
 
-Admins can edit the email subject and body on the **Email template** admin page (sandboxed Jinja, stored in `app_settings`, live preview with sample data, one-click reset). A broken saved template can never block sends — the built-in default is the automatic fallback, and the edit page surfaces the error.
+Admins audit and edit **every** automated message on the **Message templates** admin page — pairing email (subject + body), pairing Slack DM, the weekly #lunchtag announcement, and the Sunday admin reminder (subject + body). Each is sandboxed Jinja stored in `app_settings` (registry: `TEMPLATES` in `portal/notifications.py`), with a live sample-data preview and one-click reset. A broken saved template can never block sends — the built-in default is the automatic fallback, and the page surfaces the error.
 
 Two independent safety layers, both off by default:
 

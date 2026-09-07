@@ -94,14 +94,14 @@ def test_logout_clears_session(auth_env, db_path):
 # --- tab bar ----------------------------------------------------------------
 
 
-def test_tabs_render_for_member_with_coming_soon(auth_env, db_path):
+def test_tabs_render_only_enabled_features(auth_env, db_path):
     app = create_app(db_path)
     client = onboarded_member(app, "someone@yale.edu", "Someone")
     html = client.get("/profile").get_data(as_text=True)
-    for label in ("Profile", "LunchTag", "YDBoba", "Events Schedule",
-                  "Tournament Registration", "Reimbursements"):
-        assert label in html, label
-    assert html.count("(Coming Soon!)") == 4
+    assert "Profile" in html and "LunchTag" in html
+    for label in ("YDBoba", "Events Schedule", "Tournament Registration", "Reimbursements"):
+        assert label not in html, label  # unshipped features stay hidden
+    assert "Coming Soon" not in html
     assert 'class="subnav"' not in html  # no admin sub-nav for members
 
 

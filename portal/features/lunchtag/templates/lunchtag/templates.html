@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h2>Message templates</h2>
+  <p class="muted">
+    Every automated message the portal sends, in one place. Templates use Jinja
+    syntax. A broken template can't block a send — the built-in default is used
+    as a fallback — but check each preview after saving.
+  </p>
+</section>
+
+{% for item in items %}
+<section class="panel template-block" id="{{ item.key }}">
+  <div class="template-head">
+    <h3>{{ item.spec.label }}</h3>
+    <span class="tag">{{ item.spec.channel }}</span>
+    {% if item.customized %}<span class="tag tag-custom">Customized</span>{% else %}<span class="tag">Default</span>{% endif %}
+  </div>
+
+  <form action="{{ url_for('lunchtag.admin_templates') }}" method="post" class="stacked-form template-form">
+    <input type="hidden" name="key" value="{{ item.key }}">
+    <label>
+      Template
+      {% if item.spec.multiline %}
+      <textarea name="value" rows="{{ 12 if item.value.count('\n') > 6 else 6 }}" spellcheck="false">{{ item.value }}</textarea>
+      {% else %}
+      <input type="text" name="value" value="{{ item.value }}">
+      {% endif %}
+    </label>
+    <div class="actions">
+      <button type="submit">Save</button>
+      <button class="ghost" type="submit" name="action" value="reset"
+              onclick="return confirm('Replace this template with the built-in default?')">
+        Reset to default
+      </button>
+    </div>
+  </form>
+
+  <details class="template-vars">
+    <summary>Available variables</summary>
+    <table>
+      <tbody>
+        {% for var, desc in item.spec.variables %}
+        <tr><td><code>{{ var }}</code></td><td>{{ desc }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+
+  <h4>Preview <span class="muted">(sample data)</span></h4>
+  {% if item.error %}
+  <p class="muted">Template error — the default will be used for real sends until this is fixed:</p>
+  <pre class="email-preview error">{{ item.error }}</pre>
+  {% else %}
+  <pre class="email-preview">{{ item.preview }}</pre>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}
