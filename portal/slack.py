@@ -85,6 +85,42 @@ def normalize_name(name: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z ]", "", flat.lower())).strip()
 
 
+def match_member(members: list[dict], full_name: str, email: str | None = None) -> dict | None:
+    """Find the one workspace member for a portal user, loosest-last:
+    email → full name → unique first name → unique last name. Members whose
+    Slack name is just "Faith" still match "Faith Duncan". None if ambiguous."""
+    email = (email or "").strip().lower()
+    if email:
+        hits = [m for m in members if m.get("email") == email]
+        if len(hits) == 1:
+            return hits[0]
+    target = normalize_name(full_name)
+    if not target:
+        return None
+    parts = target.split()
+
+    def names_of(m):
+        return {normalize_name(m.get("name", "")), normalize_name(m.get("display_name", ""))} - {""}
+
+    for predicate in (
+        lambda names: target in names,
+        lambda names: any(n.split()[0] == parts[0] for n in names) if parts else False,
+        lambda names: any(n.split()[-1] == parts[-1] for n in names) if len(parts) > 1 else False,
+    ):
+        hits = [m for m in members if predicate(names_of(m))]
+        unique = {m["id"]: m for m in hits}
+        if len(unique) == 1:
+            return next(iter(unique.values()))
+    return None
+
+
+def identify_member(full_name: str, email: str | None = None) -> dict | None:
+    """match_member() against the live workspace; None when Slack is off."""
+    if not enabled():
+        return None
+    return match_member(list_members(), full_name, email)
+
+
 # --- sending ----------------------------------------------------------------
 
 
@@ -110,6 +146,22 @@ def send_dm(email: str, text: str, user_id: str | None = None) -> str:
         if user_id is None:
             return "no-slack-user"
     return send_dm_to_user(user_id, text)
+
+
+def reply_in_thread(channel_id: str, thread_ts: str, text: str) -> str:
+    if not enabled():
+        log.info("[dry-run] slack thread reply in %s: %s", channel_id, text[:80])
+        return "dry-run"
+    _call("chat.postMessage", channel=channel_id, thread_ts=thread_ts, text=text)
+    return "sent"
+
+
+def channel_name(channel_id: str) -> str | None:
+    """Name of a channel by ID (None if the bot can't see it)."""
+    try:
+        return _call("conversations.info", channel=channel_id)["channel"].get("name")
+    except SlackError:
+        return None
 
 
 def post_channel(text: str) -> str:

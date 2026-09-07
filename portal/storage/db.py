@@ -68,6 +68,16 @@ CREATE TABLE IF NOT EXISTS player_preferences (
     FOREIGN KEY(target_id) REFERENCES players(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS lunchtag_completions (
+    session_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, player_id),
+    FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
 CREATE INDEX IF NOT EXISTS idx_groups_session ON groups(session_id);
 CREATE INDEX IF NOT EXISTS idx_group_members_player ON group_members(player_id);

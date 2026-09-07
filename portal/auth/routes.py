@@ -34,7 +34,7 @@ _OAUTH_CLIENT_KEY = "lunchtag_google_oauth"
 # Blueprints whose endpoints signed-in non-admins may reach, deny-by-default.
 # Within a member blueprint, endpoints named admin_* stay admin-only — new
 # features must follow that naming convention for their admin routes.
-MEMBER_BLUEPRINTS = {"profile", "lunchtag"}
+MEMBER_BLUEPRINTS = {"profile", "lunchtag", "leaderboard"}
 MEMBER_APP_ENDPOINTS = {"index", "me_redirect"}
 
 
@@ -96,6 +96,10 @@ def init_auth(app: Flask) -> None:
         if endpoint is None:  # e.g. 404 — let Flask handle it
             return None
         if endpoint == "static" or endpoint.startswith("auth."):
+            return None
+        if endpoint.startswith("slack."):
+            # Inbound Slack webhooks: no session, authenticated by Slack's
+            # request signature inside the handler instead.
             return None
         if not session.get("user_email"):
             return redirect(url_for("auth.login"))

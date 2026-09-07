@@ -263,6 +263,17 @@ def set_slack_user(player_id: int, slack_user_id: str, slack_email: str | None, 
         conn.close()
 
 
+def player_by_slack_user(slack_user_id: str, db_path=None) -> int | None:
+    conn = _open(db_path)
+    try:
+        row = conn.execute(
+            "SELECT player_id FROM player_slack WHERE slack_user_id = ?", (slack_user_id,)
+        ).fetchone()
+        return row["player_id"] if row is not None else None
+    finally:
+        conn.close()
+
+
 def slack_users_by_player(db_path=None) -> dict[int, str]:
     conn = _open(db_path)
     try:

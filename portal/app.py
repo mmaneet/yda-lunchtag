@@ -15,13 +15,16 @@ from flask import Flask, g, redirect, request, url_for
 
 from portal.auth import auth_enabled, current_role, init_auth
 from portal.config import default_db_path
+from portal.features.leaderboard.routes import bp as leaderboard_bp
 from portal.features.lunchtag.routes import bp as lunchtag_bp
 from portal.features.profile.routes import bp as profile_bp
+from portal.features.slack_events.routes import bp as slack_bp
 from portal.shared import get_repo
 
 TABS = [
     {"label": "Profile", "endpoint": "profile.view", "blueprint": "profile", "enabled": True},
     {"label": "LunchTag", "endpoint": "lunchtag.me", "blueprint": "lunchtag", "enabled": True},
+    {"label": "Leaderboard", "endpoint": "leaderboard.view", "blueprint": "leaderboard", "enabled": True},
     {"label": "YDBoba", "enabled": False},
     {"label": "Events Schedule", "enabled": False},
     {"label": "Tournament Registration", "enabled": False},
@@ -36,6 +39,8 @@ def create_app(db_path: Path | None = None) -> Flask:
     init_auth(app)
     app.register_blueprint(profile_bp)
     app.register_blueprint(lunchtag_bp, url_prefix="/lunchtag")
+    app.register_blueprint(leaderboard_bp)
+    app.register_blueprint(slack_bp)
 
     @app.teardown_appcontext
     def close_repo(exception: Exception | None = None) -> None:

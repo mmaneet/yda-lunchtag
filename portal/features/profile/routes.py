@@ -102,9 +102,28 @@ def welcome():
         )
         opted_in = request.form.get("lunchtag_opt_in") == "1"
         repo.set_lunchtag_opt_in(player.id, opted_in)
+        _sync_slack_identity(player.id, display_name, email)
         flash("Welcome to LunchTag!" if opted_in else "Welcome! You can join LunchTag from your profile anytime.")
         return redirect(url_for("profile.view"))
     return render_template("welcome.html")
+
+
+def _sync_slack_identity(player_id: int, display_name: str, email: str) -> None:
+    """Best-effort: find this member in the YDA Slack so DMs reach them.
+    Never blocks onboarding — Slack being down just means no ID yet (the
+    admin Slack sync page catches stragglers)."""
+    from portal import slack
+
+    db = current_app.config["DB_PATH"]
+    if auth_store.slack_users_by_player(db_path=db).get(player_id):
+        return
+    try:
+        member = slack.identify_member(display_name, email)
+    except Exception:
+        current_app.logger.exception("Slack identity lookup failed during onboarding")
+        return
+    if member:
+        auth_store.set_slack_user(player_id, member["id"], member.get("email"), db_path=db)
 
 
 @bp.route("/welcome/setup")

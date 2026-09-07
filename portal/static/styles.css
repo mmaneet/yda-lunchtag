@@ -774,3 +774,25 @@ th, td {
 .template-block h4 {
   margin: 12px 0 6px;
 }
+
+/* --- Leaderboard ----------------------------------------------------------- */
+
+.leaderboard-table .rank-col {
+  width: 56px;
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.leaderboard-table .count-col {
+  width: 110px;
+  text-align: right;
+}
+
+.leaderboard-table tr.top td {
+  background: #fbf7e6;
+}
+
+.leaderboard-table tr.me td {
+  background: #e8eef7;
+  font-weight: 600;
+}

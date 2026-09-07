@@ -438,6 +438,46 @@ class Repository:
             history.append((summary, tuple(m["player_id"] for m in members)))
         return history
 
+    # Completions (leaderboard)
+    def latest_confirmed_session(self) -> Session | None:
+        row = self.conn.execute(
+            "SELECT id FROM sessions WHERE status = 'confirmed' ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        return self.get_session(row["id"]) if row else None
+
+    def record_completions(self, session_id: int, player_ids: Iterable[int], source: str) -> list[int]:
+        """Credit players for completing a round; one credit per player per
+        round, so repeats are ignored. Returns the ids newly credited."""
+        newly = []
+        now = _now_iso()
+        for pid in player_ids:
+            row = self.conn.execute(
+                "INSERT INTO lunchtag_completions (session_id, player_id, source, created_at) "
+                "VALUES (?, ?, ?, ?) ON CONFLICT (session_id, player_id) DO NOTHING RETURNING player_id",
+                (session_id, pid, source, now),
+            ).fetchone()
+            if row is not None:
+                newly.append(pid)
+        self.conn.commit()
+        return newly
+
+    def leaderboard(self) -> list[tuple[Player, int]]:
+        """Every active player with their completed-lunch count, best first
+        (ties broken by name)."""
+        rows = self.conn.execute(
+            "SELECT p.*, COUNT(c.player_id) AS done FROM players p "
+            "LEFT JOIN lunchtag_completions c ON c.player_id = p.id "
+            "WHERE p.deleted = 0 AND p.active = 1 "
+            "GROUP BY p.id ORDER BY done DESC, lower(p.name)"
+        ).fetchall()
+        return [(_player_from_row(row), int(row["done"])) for row in rows]
+
+    def completed_session_ids(self, player_id: int) -> set[int]:
+        rows = self.conn.execute(
+            "SELECT session_id FROM lunchtag_completions WHERE player_id = ?", (player_id,)
+        ).fetchall()
+        return {row["session_id"] for row in rows}
+
     def reset_history(self) -> None:
         self.conn.execute("DELETE FROM sessions")
         self.conn.commit()

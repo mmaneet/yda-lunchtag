@@ -192,6 +192,7 @@ DEFAULT_CHANNEL_TEMPLATE = """\
 :sandwich: *Hey everyone! This week's LunchTag pairings are out!*
 Check your Slack DMs, email, or the website for your partner.
 {{ website_url }}/lunchtag
+Post a lunch photo here to log it — leaderboard: {{ website_url }}/leaderboard
 _Notifications can be disabled on the website's LunchTag page._"""
 
 DEFAULT_REMINDER_SUBJECT = "LunchTag: push this week's pairings"

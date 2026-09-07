@@ -59,6 +59,8 @@ portal/
   features/
     profile/              # blueprint: /profile, /welcome — identity only
     lunchtag/             # blueprint: /lunchtag — pairings, strikes/boosts, engine/, admin pages
+    leaderboard/          # blueprint: /leaderboard — completed-lunch ranking
+    slack_events/         # blueprint: /slack/events + /slack/commands — inbound Slack (no login; HMAC-verified)
   tests/
 ```
 
@@ -92,6 +94,10 @@ Two independent safety layers, both off by default:
 
 1. **Master switch** (config-as-data): `python -m portal.cli notifications on|off|status`.
 2. **Credentials**: with no email/Slack env vars, everything is a dry-run — counted and logged, nothing sent. Email transports, in preference order: **Gmail API** (sends from a personal account; one-time `gmail.send` consent via `python scripts/get_gmail_token.py` — see that file for the full recipe) or any **SMTP** provider. `PORTAL_BASE_URL` controls links in messages.
+
+**Leaderboard + Slack bot inbound** (`portal/features/slack_events/`): Slack pushes channel messages and bot DMs to `POST /slack/events` (exempt from the login gate; every request is verified against `SLACK_SIGNING_SECRET`, stale/unsigned requests get 401, Slack retries are skipped because handlers are idempotent). A photo — or "had lunchtag" — posted in `SLACK_CHANNEL` credits the sender *and their partner(s)* from the latest confirmed round in `lunchtag_completions` (one credit per player per round) and the bot replies in-thread; the **Leaderboard** tab ranks members by completed lunches. DMs to the bot: "opt in / join" gets the website link (the bot never creates accounts); "quit / opt out / leave / stop" — or the `/quit` slash command via `POST /slack/commands` — opts the member out. At onboarding the portal auto-identifies the member in Slack (email, then full name, then unique first/last name — so "Faith" matches "Faith Duncan") and stores their Slack ID; the admin Slack sync page catches anyone missed.
+
+**Slack app configuration** (api.slack.com → LunchTag app): Event Subscriptions → Request URL `https://lunchtag.yaledebate.org/slack/events` → subscribe to bot events `message.channels` and `message.im`; Slash Commands → `/quit` with Request URL `https://lunchtag.yaledebate.org/slack/commands`; reinstall the app if Slack asks.
 
 **Slack** (`portal/slack.py`, bot token from the LunchTag app at api.slack.com — scopes listed in `.env.example`): on confirm, each linked member with the Slack toggle on gets a DM with their pairing (looked up by their linked email via `users.lookupByEmail`; members whose Slack email differs are counted as "not found in Slack"), and the bot posts a "pairings are out" notice to `SLACK_CHANNEL`. The admin **Slack sync** page matches roster players to workspace members by name: exact matches with a verified `@yale.edu` Slack email are auto-linkable in one click; Gmail-registered and unmatched members are listed for manual linking on the Players page. Non-roster Slack members are never imported — new members onboard themselves on the site. The old `SLACK_WEBHOOK_URL` remains as a fallback for the channel post only.
 
