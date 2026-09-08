@@ -151,18 +151,17 @@ def commands():
     return jsonify({"response_type": "ephemeral", "text": "Unknown command."})
 
 
-def _handle_channel_message(event: dict, user_id: str, text: str, db_path=None) -> str:
-    if not (_is_image_message(event) or COMPLETION_PHRASE.search(text)):
-        return "ignored:not-a-completion"
-    wanted = os.environ.get("SLACK_CHANNEL", "lunchtag").lstrip("#")
-    channel_id = event.get("channel", "")
-    if slack.enabled() and slack.channel_name(channel_id) != wanted:
-        return "ignored:other-channel"
+def _is_completion_message(event: dict) -> bool:
+    return _is_image_message(event) or bool(COMPLETION_PHRASE.search(event.get("text") or ""))
+
+
+def credit_completion(repo, user_id: str, channel_id: str, ts: str, *, session=None,
+                      reply: bool = True, db_path=None) -> str:
+    """Credit the sender's whole group for the given (or latest) round."""
     player_id = auth_store.player_by_slack_user(user_id, db_path=db_path)
     if player_id is None:
         return "ignored:unknown-member"
-    repo = get_repo()
-    session = repo.latest_confirmed_session()
+    session = session or repo.latest_confirmed_session()
     if session is None:
         return "ignored:no-round"
     group = next((g for g in session.groups if player_id in g.member_ids), None)
@@ -171,11 +170,65 @@ def _handle_channel_message(event: dict, user_id: str, text: str, db_path=None) 
     newly = repo.record_completions(session.id, group.member_ids, source="slack")
     if not newly:
         return "duplicate"
-    names = repo.display_names()
-    who = " & ".join(names.get(pid, f"#{pid}") for pid in group.member_ids)
-    slack.reply_in_thread(
-        channel_id, event.get("ts", ""),
-        f":white_check_mark: LunchTag logged for *{who}*! "
-        f"Leaderboard: {notifications.base_url()}/leaderboard",
-    )
+    if reply:
+        names = repo.display_names()
+        who = " & ".join(names.get(pid, f"#{pid}") for pid in group.member_ids)
+        slack.reply_in_thread(
+            channel_id, ts,
+            f":white_check_mark: LunchTag logged for *{who}*! "
+            f"Leaderboard: {notifications.base_url()}/leaderboard",
+        )
     return f"credited:{len(newly)}"
+
+
+def _handle_channel_message(event: dict, user_id: str, text: str, db_path=None) -> str:
+    if not _is_completion_message(event):
+        return "ignored:not-a-completion"
+    wanted = os.environ.get("SLACK_CHANNEL", "lunchtag").lstrip("#")
+    channel_id = event.get("channel", "")
+    if slack.enabled() and slack.channel_name(channel_id) != wanted:
+        return "ignored:other-channel"
+    return credit_completion(get_repo(), user_id, channel_id, event.get("ts", ""), db_path=db_path)
+
+
+def backfill_from_channel(db_path=None, reply: bool = False) -> dict:
+    """Re-scan the LunchTag channel since the latest round was confirmed and
+    credit any qualifying messages the live events missed. Idempotent —
+    already-credited groups come back as duplicates. Safe to run on a cron."""
+    from pathlib import Path
+
+    from portal.config import default_db_path
+    from portal.storage.repo import Repository
+
+    if not slack.enabled():
+        return {"status": "slack-disabled"}
+    repo = Repository(Path(db_path) if db_path is not None else default_db_path())
+    try:
+        session = repo.latest_confirmed_session()
+        if session is None:
+            return {"status": "no-round"}
+        name = os.environ.get("SLACK_CHANNEL", "lunchtag").lstrip("#")
+        channel_id = slack.find_channel_id(name)
+        if channel_id is None:
+            return {"status": "channel-not-found", "channel": name}
+        oldest = f"{session.created_at.timestamp():.6f}"
+        counts = {"status": "ok", "scanned": 0, "qualifying": 0, "credited": 0,
+                  "duplicate": 0, "ignored": 0}
+        for msg in slack.channel_history(channel_id, oldest):
+            counts["scanned"] += 1
+            if msg.get("bot_id") or msg.get("subtype") in {"bot_message", "channel_join"}:
+                continue
+            if not (msg.get("user") and _is_completion_message(msg)):
+                continue
+            counts["qualifying"] += 1
+            result = credit_completion(repo, msg["user"], channel_id, msg.get("ts", ""),
+                                       session=session, reply=reply, db_path=db_path)
+            if result.startswith("credited"):
+                counts["credited"] += int(result.split(":")[1])
+            elif result == "duplicate":
+                counts["duplicate"] += 1
+            else:
+                counts["ignored"] += 1
+        return counts
+    finally:
+        repo.close()

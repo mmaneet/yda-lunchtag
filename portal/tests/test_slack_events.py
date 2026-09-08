@@ -257,3 +257,52 @@ def test_quit_slash_command(auth_env, db_path, monkeypatch):
     assert repo.get_profile(pid).lunchtag_opt_in is False
     repo.close()
     assert client.post("/slack/commands", data=body).status_code == 401  # unsigned
+
+
+# --- channel backfill --------------------------------------------------------------
+
+
+def test_backfill_credits_missed_messages_idempotently(auth_env, db_path, monkeypatch):
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    a, b, c, sid = _round(db_path)
+    monkeypatch.setattr(slack, "find_channel_id", lambda name: "C_LUNCH")
+    history = [
+        {"user": "U_AVA", "ts": "10.0", "text": "anyone around?"},                       # chatter
+        {"user": "U_AVA", "ts": "11.0", "text": "", "files": [{"mimetype": "image/png"}]},  # photo
+        {"user": "U_CARA", "ts": "12.0", "text": "had lunchtag"},                         # not in round
+        {"user": "U_BOT", "ts": "13.0", "text": "had lunchtag", "bot_id": "B1"},          # bot
+    ]
+    monkeypatch.setattr(slack, "channel_history", lambda cid, oldest: history)
+    replies = []
+    monkeypatch.setattr(slack, "reply_in_thread", lambda *a: replies.append(a) or "sent")
+    result = events.backfill_from_channel(db_path=db_path)
+    assert result["status"] == "ok"
+    assert result["scanned"] == 4 and result["qualifying"] == 2
+    assert result["credited"] == 2 and result["ignored"] == 1
+    assert replies == []  # backfill is quiet by default
+    repo = Repository(db_path)
+    assert {p.name: n for p, n in repo.leaderboard()} == {"Ava Lin": 1, "Ben Ortiz": 1, "Cara Diaz": 0}
+    repo.close()
+    again = events.backfill_from_channel(db_path=db_path)
+    assert again["credited"] == 0 and again["duplicate"] == 1
+
+
+def test_backfill_noop_without_slack_or_round(db_path, monkeypatch):
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    assert events.backfill_from_channel(db_path=db_path) == {"status": "slack-disabled"}
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    assert events.backfill_from_channel(db_path=db_path) == {"status": "no-round"}
+
+
+def test_leaderboard_sync_button_is_admin_only(auth_env, db_path, monkeypatch):
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    app = create_app(db_path)
+    member = onboarded_member(app, "m@yale.edu", "Member")
+    assert "Sync from Slack" not in member.get("/leaderboard").get_data(as_text=True)
+    assert member.post("/leaderboard/admin/sync").status_code == 302  # bounced by the gate
+    store.set_role("boss@yale.edu", "admin", db_path=db_path)
+    admin = app.test_client()
+    with admin.session_transaction() as sess:
+        sess["user_email"] = "boss@yale.edu"
+    resp = admin.post("/leaderboard/admin/sync", follow_redirects=True)
+    assert b"slack-disabled" in resp.data

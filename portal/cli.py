@@ -55,6 +55,8 @@ def main() -> None:
     notif.add_argument("action", choices=["on", "off", "status"])
 
     sub.add_parser("remind-admins")
+    sub.add_parser("slack-backfill")
+    sub.add_parser("daily")  # cron entrypoint: backfill every day, remind admins on Sundays
 
     args = parser.parse_args()
 
@@ -140,6 +142,22 @@ def main() -> None:
         else:
             notifications.set_notifications_enabled(args.action == "on")
             print(f"Notifications turned {args.action}.")
+    elif args.command == "slack-backfill":
+        from portal.features.slack_events.routes import backfill_from_channel
+
+        print("Slack backfill:", backfill_from_channel())
+    elif args.command == "daily":
+        from datetime import datetime, timezone
+
+        from portal import notifications
+        from portal.features.slack_events.routes import backfill_from_channel
+
+        print("Slack backfill:", backfill_from_channel())
+        if datetime.now(timezone.utc).weekday() == 6 and notifications.notifications_enabled():
+            result = notifications.send_admin_reminder()
+            print(f"Admin reminder: {result['admins']} admins, {result['sent']} sent, {result['dry_run']} dry-run.")
+        else:
+            print("Admin reminder: not Sunday (or notifications off) — skipped.")
     elif args.command == "remind-admins":
         from portal import notifications
 

@@ -6,7 +6,7 @@ Completions are recorded by the Slack bot when a member posts a photo (or
 
 from __future__ import annotations
 
-from flask import Blueprint, render_template
+from flask import Blueprint, current_app, flash, redirect, render_template, url_for
 
 from portal.shared import get_repo, linked_player
 
@@ -33,3 +33,20 @@ def view():
         })
     total = sum(r["count"] for r in rows)
     return render_template("leaderboard/view.html", rows=rows, total=total)
+
+
+@bp.route("/leaderboard/admin/sync", methods=["POST"])
+def admin_sync():
+    """Re-scan the Slack channel for missed completions (admin only)."""
+    from portal.features.slack_events.routes import backfill_from_channel
+
+    result = backfill_from_channel(db_path=current_app.config["DB_PATH"])
+    if result.get("status") == "ok":
+        flash(
+            f"Slack sync: scanned {result['scanned']} messages, {result['qualifying']} qualifying, "
+            f"credited {result['credited']} people, {result['duplicate']} already counted, "
+            f"{result['ignored']} ignored (unknown member / not in round)."
+        )
+    else:
+        flash(f"Slack sync did nothing: {result.get('status')}.")
+    return redirect(url_for("leaderboard.view"))

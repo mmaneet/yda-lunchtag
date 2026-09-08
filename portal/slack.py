@@ -164,6 +164,36 @@ def channel_name(channel_id: str) -> str | None:
         return None
 
 
+def find_channel_id(name: str) -> str | None:
+    """ID of a public channel by name (the bot must be able to see it)."""
+    cursor = None
+    while True:
+        data = _call("conversations.list", types="public_channel", limit=200,
+                     **({"cursor": cursor} if cursor else {}))
+        for ch in data.get("channels", []):
+            if ch.get("name") == name:
+                return ch["id"]
+        cursor = data.get("response_metadata", {}).get("next_cursor") or None
+        if not cursor:
+            return None
+
+
+def channel_history(channel_id: str, oldest: str) -> list[dict]:
+    """All top-level messages in a channel since `oldest` (a Slack ts string),
+    oldest first."""
+    messages: list[dict] = []
+    cursor = None
+    while True:
+        data = _call("conversations.history", channel=channel_id, oldest=oldest, limit=200,
+                     **({"cursor": cursor} if cursor else {}))
+        messages.extend(data.get("messages", []))
+        cursor = data.get("response_metadata", {}).get("next_cursor") or None
+        if not cursor:
+            break
+    messages.sort(key=lambda m: float(m.get("ts", "0")))
+    return messages
+
+
 def post_channel(text: str) -> str:
     """Post to the configured channel (SLACK_CHANNEL, default 'lunchtag')."""
     if not enabled():
