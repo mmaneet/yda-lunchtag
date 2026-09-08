@@ -68,10 +68,17 @@ def events():
     if request.headers.get("X-Slack-Retry-Num"):
         return "", 200
     if payload.get("type") == "event_callback":
+        event = payload.get("event", {})
         try:
-            handle_event(payload.get("event", {}), db_path=current_app.config["DB_PATH"])
+            result = handle_event(event, db_path=current_app.config["DB_PATH"])
         except Exception:
             log.exception("Slack event handling failed")
+            result = "error"
+        log.info(
+            "slack event type=%s subtype=%s channel_type=%s user=%s files=%d -> %s",
+            event.get("type"), event.get("subtype"), event.get("channel_type"),
+            event.get("user"), len(event.get("files", []) or []), result,
+        )
     return "", 200
 
 

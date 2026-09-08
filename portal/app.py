@@ -8,6 +8,7 @@ hidden from the tab bar until the feature ships.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -33,6 +34,7 @@ TABS = [
 
 
 def create_app(db_path: Path | None = None) -> Flask:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     app = Flask(__name__)
     app.secret_key = os.environ.get("FLASK_SECRET_KEY", "lunchtag-dev")
     app.config["DB_PATH"] = db_path or default_db_path()
