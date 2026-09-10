@@ -45,6 +45,7 @@ The maintainer profile is the single most important architectural constraint:
 
 - The GitHub repo must live in a **YDA GitHub organization**, not a personal account. Maneet is a member/admin of the org, not the owner of the repo namespace.
 - The Railway project should ultimately be owned by an official YDA Railway account (role email, org card, 2FA), with individual maintainers added as project members. If prototyping starts on a personal account, transferring requires both accounts subscribed — plan the transfer as an explicit task, not an afterthought.
+- Commits are attributed to the human maintainer only (`manee <mmaneet2007@gmail.com>` today). Never add `Co-Authored-By` trailers; history was rewritten on 2026-09-07 to remove them.
 - The DNS login for yaledebate.org is the org's most powerful credential. Domain changes require: (1) DNS record update, (2) OAuth redirect URI update in Google Cloud console, (3) `BASE_URL`-type env var update. That three-item checklist is the complete domain-move procedure.
 
 ## Product roadmap (context for future features)
