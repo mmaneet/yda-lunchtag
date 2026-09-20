@@ -255,3 +255,39 @@ def test_slack_sync_page_without_token(auth_env, db_path, monkeypatch):
     resp = admin.get("/lunchtag/admin/slack-sync")
     assert resp.status_code == 200
     assert b"isn't configured" in resp.data
+
+
+# --- manual leaderboard credits (admin) ---------------------------------------
+
+
+def test_admin_can_credit_and_uncredit_a_member(auth_env, db_path):
+    app = create_app(db_path)
+    repo = Repository(db_path)
+    a = repo.add_player("Ava")
+    b = repo.add_player("Ben")
+    sid = repo.create_draft(1, 0.0, [[a.id, b.id]])
+    repo.confirm_draft(sid, 0.0)
+    repo.close()
+    store.set_role("boss@yale.edu", "admin", db_path=db_path)
+    admin = app.test_client()
+    with admin.session_transaction() as sess:
+        sess["user_email"] = "boss@yale.edu"
+    html = admin.get(f"/lunchtag/admin/history/{sid}").get_data(as_text=True)
+    assert "mark done" in html and "credits for this round: 0 of 2" in html
+    # Credit Ava only — Ben is untouched (unlike the Slack path, which credits the group).
+    admin.post(f"/lunchtag/admin/history/{sid}/completion", data={"player_id": a.id})
+    repo = Repository(db_path)
+    assert {p.name: n for p, n in repo.leaderboard()} == {"Ava": 1, "Ben": 0}
+    repo.close()
+    html = admin.get(f"/lunchtag/admin/history/{sid}").get_data(as_text=True)
+    assert "✓ done" in html and "credits for this round: 1 of 2" in html
+    # Idempotent, then remove.
+    resp = admin.post(f"/lunchtag/admin/history/{sid}/completion", data={"player_id": a.id}, follow_redirects=True)
+    assert b"already credited" in resp.data
+    admin.post(f"/lunchtag/admin/history/{sid}/completion", data={"player_id": a.id, "action": "remove"})
+    repo = Repository(db_path)
+    assert {p.name: n for p, n in repo.leaderboard()} == {"Ava": 0, "Ben": 0}
+    repo.close()
+    # Members can't reach it.
+    member = onboarded_member(app, "m@yale.edu", "Member")
+    assert member.post(f"/lunchtag/admin/history/{sid}/completion", data={"player_id": a.id}).status_code == 302

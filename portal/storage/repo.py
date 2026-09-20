@@ -485,6 +485,21 @@ class Repository:
         self.conn.commit()
         return newly
 
+    def remove_completion(self, session_id: int, player_id: int) -> bool:
+        """Un-credit a player for a round (admin correction). True if removed."""
+        row = self.conn.execute(
+            "DELETE FROM lunchtag_completions WHERE session_id = ? AND player_id = ? RETURNING player_id",
+            (session_id, player_id),
+        ).fetchone()
+        self.conn.commit()
+        return row is not None
+
+    def completed_player_ids(self, session_id: int) -> set[int]:
+        rows = self.conn.execute(
+            "SELECT player_id FROM lunchtag_completions WHERE session_id = ?", (session_id,)
+        ).fetchall()
+        return {row["player_id"] for row in rows}
+
     def leaderboard(self) -> list[tuple[Player, int]]:
         """Every active player with their completed-lunch count, best first
         (ties broken by name)."""

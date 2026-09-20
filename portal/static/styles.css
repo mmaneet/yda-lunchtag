@@ -796,3 +796,30 @@ th, td {
   background: #e8eef7;
   font-weight: 600;
 }
+
+/* --- Round page: manual completion credits --------------------------------- */
+
+.completion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  list-style: none;
+  padding: 3px 0;
+}
+
+.inline-form {
+  display: inline;
+  margin: 0;
+}
+
+.completion-btn {
+  padding: 2px 10px;
+  font-size: 0.78rem;
+}
+
+.completion-btn.done {
+  background: #e6f4ea;
+  border-color: #2e7d32;
+  color: #2e7d32;
+}

@@ -386,7 +386,33 @@ def admin_history_detail(session_id: int):
         repeat_pairs=_repeat_pairs(repo, breakdown, stats, players_map),
         notification_runs=repo.notification_runs(session_id),
         notifications_on=notifications.notifications_enabled(current_app.config["DB_PATH"]),
+        completed=repo.completed_player_ids(session_id),
     )
+
+
+@bp.route("/admin/history/<int:session_id>/completion", methods=["POST"])
+def admin_toggle_completion(session_id: int):
+    """Manually mark a member as having (or not having) done their LunchTag
+    for this round — the same credit the Slack bot records, so the
+    leaderboard stays consistent. Use when Slack misses a photo or credits
+    someone wrongly."""
+    repo = get_repo()
+    if repo.get_session(session_id).status != "confirmed":
+        flash("Only confirmed rounds can be credited.")
+        return redirect(url_for("lunchtag.admin_history"))
+    try:
+        player_id = int(request.form.get("player_id", ""))
+    except ValueError:
+        flash("Unknown player.")
+        return redirect(url_for("lunchtag.admin_history_detail", session_id=session_id))
+    name = repo.get_player(player_id).name
+    if request.form.get("action") == "remove":
+        repo.remove_completion(session_id, player_id)
+        flash(f"Removed {name}'s credit for this round.")
+    else:
+        newly = repo.record_completions(session_id, [player_id], source="admin")
+        flash(f"Credited {name} for this round." if newly else f"{name} was already credited.")
+    return redirect(url_for("lunchtag.admin_history_detail", session_id=session_id))
 
 
 @bp.route("/admin/history/<int:session_id>/notify", methods=["POST"])

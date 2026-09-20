@@ -3,13 +3,29 @@
 <section class="panel">
   <h2>Session {{ session.id }}</h2>
   <p class="muted">Confirmed {{ session.created_at.strftime('%Y-%m-%d %H:%M') }} · Score {{ '%.2f'|format(session.score) }}</p>
+  {% if session.status == 'confirmed' %}
+  <p class="muted">Leaderboard credits for this round: {{ completed | length }} of {{ groups | map(attribute='member_ids') | map('length') | sum }}. Click a name's button to credit or un-credit manually (same credit the Slack bot records).</p>
+  {% endif %}
   <div class="groups">
     {% for group in groups %}
       <div class="group-card">
         <h4>Group {{ loop.index }} · {{ group.size }} people</h4>
         <ul>
           {% for member_id in group.member_ids %}
-            <li>{{ players_map[member_id].name }}</li>
+            <li class="completion-row">
+              <span>{{ players_map[member_id].name }}</span>
+              {% if session.status == 'confirmed' %}
+              <form action="{{ url_for('lunchtag.admin_toggle_completion', session_id=session.id) }}" method="post" class="inline-form">
+                <input type="hidden" name="player_id" value="{{ member_id }}">
+                {% if member_id in completed %}
+                <input type="hidden" name="action" value="remove">
+                <button class="ghost completion-btn done" type="submit" title="Credited — click to remove">✓ done</button>
+                {% else %}
+                <button class="ghost completion-btn" type="submit" title="Not credited — click to credit">mark done</button>
+                {% endif %}
+              </form>
+              {% endif %}
+            </li>
           {% endfor %}
         </ul>
       </div>
