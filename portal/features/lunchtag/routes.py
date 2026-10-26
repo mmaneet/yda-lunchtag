@@ -166,7 +166,17 @@ def admin_players():
     repo = get_repo()
     players = repo.list_players(include_deleted=True)
     linked_emails = auth_store.emails_by_player(db_path=current_app.config["DB_PATH"])
-    return render_template("lunchtag/players.html", players=players, linked_emails=linked_emails)
+    opt_in = repo.opt_in_by_player()
+    pool_ids = {p.id for p in repo.list_pairing_pool()}
+    opted_out = [p for p in players if p.active and not p.deleted and p.id not in pool_ids]
+    return render_template(
+        "lunchtag/players.html",
+        players=players,
+        linked_emails=linked_emails,
+        opt_in=opt_in,
+        pool_ids=pool_ids,
+        opted_out=opted_out,
+    )
 
 
 @bp.route("/admin/players/<int:player_id>/email", methods=["POST"])

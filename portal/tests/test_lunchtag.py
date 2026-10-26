@@ -291,3 +291,18 @@ def test_admin_can_credit_and_uncredit_a_member(auth_env, db_path):
     # Members can't reach it.
     member = onboarded_member(app, "m@yale.edu", "Member")
     assert member.post(f"/lunchtag/admin/history/{sid}/completion", data={"player_id": a.id}).status_code == 302
+
+
+def test_players_page_shows_opt_in_status(auth_env, db_path):
+    app = create_app(db_path)
+    onboarded_member(app, "in@yale.edu", "Inny Member")
+    onboarded_member(app, "out@yale.edu", "Outy Member", opt_in=False)
+    store.set_role("boss@yale.edu", "admin", db_path=db_path)
+    admin = app.test_client()
+    with admin.session_transaction() as sess:
+        sess["user_email"] = "boss@yale.edu"
+    html = admin.get("/lunchtag/admin/players").get_data(as_text=True)
+    assert "1</strong> in the pairing pool" in html
+    assert "active but opted out" in html and "Outy Member" in html
+    assert html.count("Opted in") == 1 and html.count("Opted out") == 1
+    assert html.count("in pool") == 1

@@ -211,6 +211,11 @@ class Repository:
             )
         self.conn.commit()
 
+    def opt_in_by_player(self) -> dict[int, bool]:
+        """player_id -> opted in? for every profile row (no row = opted out)."""
+        rows = self.conn.execute("SELECT player_id, lunchtag_opt_in FROM player_profiles").fetchall()
+        return {row["player_id"]: bool(row["lunchtag_opt_in"]) for row in rows}
+
     def list_pairing_pool(self) -> list[Player]:
         """Active, non-deleted players who explicitly opted into LunchTag.
         Opt-in is the member's own choice — no profile row means not in."""

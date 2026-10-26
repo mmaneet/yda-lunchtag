@@ -2,6 +2,14 @@
 {% block content %}
 <section class="panel">
   <h2>Players</h2>
+  <p class="muted">
+    <strong>{{ pool_ids | length }}</strong> in the pairing pool (active <em>and</em> opted in).
+    {% if opted_out %}
+    <strong>{{ opted_out | length }}</strong> active but opted out, so not pairable:
+    {{ opted_out | map(attribute='name') | join(', ') }}.
+    {% else %}No active members are opted out.{% endif %}
+    Opt-in is each member's own choice (profile switch, onboarding, or <code>/quit</code> in Slack); admins control Active.
+  </p>
   <form class="form-row" action="{{ url_for('lunchtag.admin_add_player') }}" method="post">
     <input type="text" name="name" placeholder="Add player name" required>
     <button type="submit">Add</button>
@@ -20,6 +28,13 @@
             Deleted
           {% else %}
             {% if player.active %}Active{% else %}Inactive{% endif %}
+            ·
+            {% if opt_in.get(player.id) %}
+              <span class="status-in">Opted in</span>
+            {% else %}
+              <span class="status-out">Opted out</span>
+            {% endif %}
+            {% if player.id in pool_ids %}<span class="tag tag-pool">in pool</span>{% endif %}
           {% endif %}
         </p>
       </div>

@@ -823,3 +823,7 @@ th, td {
   border-color: #2e7d32;
   color: #2e7d32;
 }
+
+.status-in { color: #2e7d32; font-weight: 600; }
+.status-out { color: var(--danger); font-weight: 600; }
+.tag-pool { margin-left: 6px; background: #e8eef7; border-color: var(--yale-blue); color: var(--yale-blue); font-size: 0.75rem; padding: 1px 8px; }
