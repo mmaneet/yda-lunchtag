@@ -140,7 +140,7 @@ def welcome_setup():
         "welcome_setup.html",
         suggested_name=player.name if player else (session.get("user_name") or ""),
         colleges=RESIDENTIAL_COLLEGES,
-        opted_in=bool(profile and profile.lunchtag_opt_in),
+        opted_in=bool(player and player.active),
     )
 
 

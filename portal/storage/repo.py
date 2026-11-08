@@ -95,12 +95,8 @@ class Repository:
         return self.get_player(player_id)
 
     def set_player_active(self, player_id: int, active: bool) -> Player:
-        now = _now_iso()
-        self.conn.execute(
-            "UPDATE players SET active = ?, updated_at = ? WHERE id = ?",
-            (1 if active else 0, now, player_id),
-        )
-        self.conn.commit()
+        """Admin Activate/Deactivate — the same switch as the member's opt-in."""
+        self.set_lunchtag_opt_in(player_id, active)
         return self.get_player(player_id)
 
     def soft_delete_player(self, player_id: int) -> None:
@@ -184,7 +180,7 @@ class Repository:
                 merged["second_major"],
                 1 if (current is None or current.email_notifications) else 0,
                 1 if (current is None or current.slack_notifications) else 0,
-                1 if (current is not None and current.lunchtag_opt_in) else 0,
+                1 if self.get_player(player_id).active else 0,
                 1 if onboarded else 0,
                 now,
             ),
@@ -195,37 +191,33 @@ class Repository:
         return profile
 
     def set_lunchtag_opt_in(self, player_id: int, opted_in: bool) -> None:
-        """Flip a member's LunchTag participation, creating a minimal profile
-        row if needed."""
+        """Participation is one switch: opting in/out of LunchTag *is*
+        activating/deactivating the player. Whether a member flips it on their
+        profile, at onboarding, via /quit, or an admin clicks Activate, the
+        same flag changes. (The legacy player_profiles.lunchtag_opt_in column
+        is kept mirrored for old rows but is no longer read anywhere.)"""
+        now = _now_iso()
+        self.conn.execute(
+            "UPDATE players SET active = ?, updated_at = ? WHERE id = ?",
+            (1 if opted_in else 0, now, player_id),
+        )
         if self.get_profile(player_id) is None:
             self.conn.execute(
                 "INSERT INTO player_profiles (player_id, lunchtag_opt_in, onboarded, updated_at) "
                 "VALUES (?, ?, 0, ?)",
-                (player_id, 1 if opted_in else 0, _now_iso()),
+                (player_id, 1 if opted_in else 0, now),
             )
         else:
             self.conn.execute(
-                "UPDATE player_profiles SET lunchtag_opt_in = ?, updated_at = ? "
-                "WHERE player_id = ?",
-                (1 if opted_in else 0, _now_iso(), player_id),
+                "UPDATE player_profiles SET lunchtag_opt_in = ?, updated_at = ? WHERE player_id = ?",
+                (1 if opted_in else 0, now, player_id),
             )
         self.conn.commit()
 
-    def opt_in_by_player(self) -> dict[int, bool]:
-        """player_id -> opted in? for every profile row (no row = opted out)."""
-        rows = self.conn.execute("SELECT player_id, lunchtag_opt_in FROM player_profiles").fetchall()
-        return {row["player_id"]: bool(row["lunchtag_opt_in"]) for row in rows}
-
     def list_pairing_pool(self) -> list[Player]:
-        """Active, non-deleted players who explicitly opted into LunchTag.
-        Opt-in is the member's own choice — no profile row means not in."""
-        rows = self.conn.execute(
-            "SELECT p.* FROM players p "
-            "JOIN player_profiles pr ON pr.player_id = p.id "
-            "WHERE p.active = 1 AND p.deleted = 0 AND pr.lunchtag_opt_in = 1 "
-            "ORDER BY lower(p.name)"
-        ).fetchall()
-        return [_player_from_row(row) for row in rows]
+        """Who gets paired: every active, non-deleted player. "Active" and
+        "opted in" are the same thing — see set_lunchtag_opt_in."""
+        return self.list_active_players()
 
     def set_notification_prefs(self, player_id: int, *, email: bool, slack: bool) -> None:
         """Set a member's notification toggles, creating a minimal profile row

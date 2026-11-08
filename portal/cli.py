@@ -65,7 +65,7 @@ def main() -> None:
     if args.command == "players" and args.action == "list":
         players_list = repo.list_players(include_deleted=True)
         for player in players_list:
-            status = "deleted" if player.deleted else "active" if player.active else "inactive"
+            status = "deleted" if player.deleted else "participating" if player.active else "sitting out"
             print(f"{player.id}: {player.name} ({status})")
     elif args.command == "players" and args.action == "add":
         repo.add_player(args.name)

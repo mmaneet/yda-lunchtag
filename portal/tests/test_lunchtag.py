@@ -293,7 +293,7 @@ def test_admin_can_credit_and_uncredit_a_member(auth_env, db_path):
     assert member.post(f"/lunchtag/admin/history/{sid}/completion", data={"player_id": a.id}).status_code == 302
 
 
-def test_players_page_shows_opt_in_status(auth_env, db_path):
+def test_players_page_shows_single_participation_status(auth_env, db_path):
     app = create_app(db_path)
     onboarded_member(app, "in@yale.edu", "Inny Member")
     onboarded_member(app, "out@yale.edu", "Outy Member", opt_in=False)
@@ -302,7 +302,39 @@ def test_players_page_shows_opt_in_status(auth_env, db_path):
     with admin.session_transaction() as sess:
         sess["user_email"] = "boss@yale.edu"
     html = admin.get("/lunchtag/admin/players").get_data(as_text=True)
-    assert "1</strong> in the pairing pool" in html
-    assert "active but opted out" in html and "Outy Member" in html
-    assert html.count("Opted in") == 1 and html.count("Opted out") == 1
-    assert html.count("in pool") == 1
+    assert "1</strong> participating in LunchTag" in html
+    assert "sitting out: Outy Member" in html
+    assert html.count("Participating") == 1 and html.count("Sitting out") == 1
+    assert "Opted in" not in html and "Inactive" not in html  # the old two-flag wording is gone
+
+
+def test_active_and_opt_in_are_one_switch(auth_env, db_path):
+    """Every path that changes participation lands on the same flag."""
+    app = create_app(db_path)
+    member = onboarded_member(app, "ava@yale.edu", "Ava", opt_in=False)
+    pid = store.get_player_id_for_email("ava@yale.edu", db_path=db_path)
+    repo = Repository(db_path)
+    assert repo.get_player(pid).active is False          # opted out at onboarding -> inactive
+    assert pid not in {p.id for p in repo.list_pairing_pool()}
+    repo.close()
+    # Member opts in on their profile -> active, in the pool.
+    member.post("/profile/lunchtag", data={"lunchtag_opt_in": "1"})
+    repo = Repository(db_path)
+    assert repo.get_player(pid).active is True
+    assert pid in {p.id for p in repo.list_pairing_pool()}
+    repo.close()
+    # Admin clicks Opt out -> the member's own LunchTag page shows them as out.
+    store.set_role("boss@yale.edu", "admin", db_path=db_path)
+    admin = app.test_client()
+    with admin.session_transaction() as sess:
+        sess["user_email"] = "boss@yale.edu"
+    admin.post(f"/lunchtag/admin/players/{pid}/toggle", data={"active": "0"})
+    assert b"Oops! You aren't opted into LunchTag!" in member.get("/lunchtag").data
+    html = member.get("/profile").get_data(as_text=True)
+    assert "not in LunchTag yet" in html
+    # Member flips back on -> admin page shows Participating again.
+    member.post("/profile/lunchtag", data={"lunchtag_opt_in": "1"})
+    assert "Participating" in admin.get("/lunchtag/admin/players").get_data(as_text=True)
+    repo = Repository(db_path)
+    assert repo.get_player(pid).active is True
+    repo.close()

@@ -234,7 +234,7 @@ def test_quit_dm_opts_member_out(auth_env, db_path, monkeypatch):
         stranger = {**ev, "user": "U_WHO", "text": "please opt out"}
         assert events.handle_event(stranger, db_path=db_path) == "quit:unknown-member"
     repo = Repository(db_path)
-    assert repo.get_profile(pid).lunchtag_opt_in is False
+    assert repo.get_player(pid).active is False  # /quit = deactivated
     repo.close()
     assert "opted out" in dms[0]
     assert "couldn't find" in dms[1].lower()
@@ -254,7 +254,7 @@ def test_quit_slash_command(auth_env, db_path, monkeypatch):
     assert resp.status_code == 200
     assert "opted out" in resp.get_json()["text"]
     repo = Repository(db_path)
-    assert repo.get_profile(pid).lunchtag_opt_in is False
+    assert repo.get_player(pid).active is False
     repo.close()
     assert client.post("/slack/commands", data=body).status_code == 401  # unsigned
 

@@ -156,6 +156,6 @@ def test_preprovisioned_member_keeps_opt_in_through_onboarding(auth_env, db_path
     assert "Returning Member" in html  # existing player name suggested
     client.post("/welcome", data={"display_name": "Returning Member", "lunchtag_opt_in": "1"})
     repo = Repository(db_path)
-    assert repo.get_profile(p.id).lunchtag_opt_in is True
+    assert repo.get_player(p.id).active is True
     assert len(repo.list_players()) == 1  # reused, not duplicated
     repo.close()

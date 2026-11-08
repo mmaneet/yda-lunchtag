@@ -3,12 +3,9 @@
 <section class="panel">
   <h2>Players</h2>
   <p class="muted">
-    <strong>{{ pool_ids | length }}</strong> in the pairing pool (active <em>and</em> opted in).
-    {% if opted_out %}
-    <strong>{{ opted_out | length }}</strong> active but opted out, so not pairable:
-    {{ opted_out | map(attribute='name') | join(', ') }}.
-    {% else %}No active members are opted out.{% endif %}
-    Opt-in is each member's own choice (profile switch, onboarding, or <code>/quit</code> in Slack); admins control Active.
+    <strong>{{ pool_ids | length }}</strong> participating in LunchTag (these get paired).
+    {% if sitting_out %}<strong>{{ sitting_out | length }}</strong> sitting out: {{ sitting_out | map(attribute='name') | join(', ') }}.{% endif %}
+    Participation is one switch — a member's profile toggle, onboarding, <code>/quit</code> in Slack, and the admin button below all flip the same thing.
   </p>
   <form class="form-row" action="{{ url_for('lunchtag.admin_add_player') }}" method="post">
     <input type="text" name="name" placeholder="Add player name" required>
@@ -27,14 +24,7 @@
           {% if player.deleted %}
             Deleted
           {% else %}
-            {% if player.active %}Active{% else %}Inactive{% endif %}
-            ·
-            {% if opt_in.get(player.id) %}
-              <span class="status-in">Opted in</span>
-            {% else %}
-              <span class="status-out">Opted out</span>
-            {% endif %}
-            {% if player.id in pool_ids %}<span class="tag tag-pool">in pool</span>{% endif %}
+            {% if player.active %}<span class="status-in">Participating</span>{% else %}<span class="status-out">Sitting out</span>{% endif %}
           {% endif %}
         </p>
       </div>
@@ -54,7 +44,7 @@
 
     <form class="form-row" action="{{ url_for('lunchtag.admin_toggle_player', player_id=player.id) }}" method="post">
       <input type="hidden" name="active" value="{{ 0 if player.active else 1 }}">
-      <button type="submit">{% if player.active %}Deactivate{% else %}Activate{% endif %}</button>
+      <button type="submit">{% if player.active %}Opt out{% else %}Opt in{% endif %}</button>
     </form>
 
     <form class="form-row" action="{{ url_for('lunchtag.admin_delete_player', player_id=player.id) }}" method="post">
